@@ -1,0 +1,71 @@
+# ── Python bytecode ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environment (uv) ─────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── uv cache ─────────────────────────────────────────────────────────────────
+.uv/
+
+# ── Secrets & env files ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Test & coverage artefacts ────────────────────────────────────────────────
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+
+# ── Type-checker caches ──────────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDEs ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+
+# ── MkDocs build output ──────────────────────────────────────────────────────
+site/
+
+# ── Helm: downloaded chart dependencies & packaged archives ──────────────────
+python-app/charts/*/charts/
+python-app/charts/*/*.tgz
+
+# ── Explicitly keep all necessary python-app files/folders ───────────────────
+!python-app/src/
+!python-app/main.py
+!python-app/Dockerfile
+!python-app/pyproject.toml
+!python-app/requirements.txt
+!python-app/uv.lock
+!python-app/.python-version
+!python-app/catalog-info.yaml
+!python-app/mkdocs.yaml
+!python-app/docs/
+!python-app/charts/
+!python-app/k8s/
+!python-app/.github/
+!python-app/README.md
