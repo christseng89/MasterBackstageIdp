@@ -4,7 +4,9 @@
       "Bash(Test-Path D:/development/MasterBackstageIdp/python-app/.git)",
       "Bash(git rm *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "PowerShell(Get-ChildItem -Path \"D:\\\\development\\\\MasterBackstageIdp\" -Force | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"Directory\"}else{\"File\"}}} | Format-Table -AutoSize)",
+      "PowerShell(tree \"D:\\\\development\\\\MasterBackstageIdp\\\\python-app\" -L 3)"
     ]
   }
 }

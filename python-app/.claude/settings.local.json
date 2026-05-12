@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(kubectl get pods,svc,deployment *)",
+      "Bash(kubectl apply *)",
+      "Bash(kubectl rollout status *)",
+      "Bash(curl *)",
+      "Bash(kubectl config *)",
+      "Bash(kubectl get *)",
+      "Bash(kubectl port-forward *)",
+      "Bash(Start-Sleep -Seconds 2)"
+    ]
+  }
+}
