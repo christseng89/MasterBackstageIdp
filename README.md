@@ -76,11 +76,44 @@ curl -iS http://localhost:5000/api/v1/healthz
 
 ```
 
-```cmd
+```cmd - DNS
 notepad C:\Windows\System32\drivers\etc\hosts
     127.0.0.1       python-app.test.com
 
 curl -iS http://python-app.test.com:5000
 curl -iS http://python-app.test.com:5000/api/v1/info
 curl -iS http://python-app.test.com:5000/api/v1/healthz    
-```    
+```
+
+```cmd - Delete Deployment/Service/Ingress
+kubectl delete -f k8s/python-app.yaml
+kubectl get all
+```
+
+## Helm Install python-app
+
+```cmd
+docker tag christseng89/python-app:latest christseng89/python-app:v2
+docker push christseng89/python-app:v2
+
+helm install python-app k8s/charts/python-app --dry-run --debug
+helm install python-app k8s/charts/python-app --set image.tag=v2
+
+helm list -n python-app
+kubectl get all -n python-app
+
+curl http://python-app.test.com:9080
+curl http://python-app.test.com:9080/api/v1/info
+curl http://python-app.test.com:9080/api/v1/healthz
+
+```
+
+```cmd - Delete Helm Release
+helm uninstall python-app
+
+```
+
+```cmd helm install with Namespace
+helm install python-app k8s/charts/python-app --set image.tag=v2 -n python-app --create-namespace
+helm uninstall python-app -n python-app
+```
