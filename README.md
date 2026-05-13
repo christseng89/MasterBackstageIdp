@@ -215,7 +215,7 @@ Create access token
 
 - Access token description => MasterBackstageIdp
 - Expiration date => None
-- Access permissions => **Read, Write, Delete**
+- Access permissions => **Read & Write**
 
 ### GitHub Actions Settings
 

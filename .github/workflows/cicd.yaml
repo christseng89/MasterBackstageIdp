@@ -34,6 +34,7 @@ jobs:
         with:
           context: python-app
           push: true
+          provenance: false
           tags: christseng89/python-app:${{ env.COMMIT_ID }}
     outputs:
       commit_id: ${{ env.COMMIT_ID }}
