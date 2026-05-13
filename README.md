@@ -165,3 +165,44 @@ http://argocd.test.com:9080
     Username: admin
     Password: Yy9Z7X4V0fF4D0cU
 ```
+
+## ArgoCD Settings Repository
+
+📌 How to Get a GitHub PAT (if you don't have one)
+
+1. Go to → https://github.com/settings/tokens
+2. Click "Generate new token (classic)"
+3. Note "MasterBackstageIdp"
+4. Set scopes: ✅ repo (full control)
+5. Click Generate token → Copy it immediately
+
+Field                       Value
+Connection Method           VIA HTTPS
+Name                        MasterBackstageIdp
+Project                     default
+Repository URL              https://github.com/christseng89/MasterBackstageIdp.git
+Username                    christseng89
+Password                    <Your GitHub PAT>
+
+## ArgoCD Application
+
+Field               Value
+Application Name    python-app ✅
+Project Name        default ✅
+Sync Policy         Manual 
+Sync Options        ✅ Auto-Create Namespace
+Enable Auto-Sync    ✅ Checked
+
+Repository URL      https://github.com/christseng89/MasterBackstageIdp.git
+Revision            main    ← 🔑 Any branch, tag, or commit
+Path                python-app/k8s/charts/python-app ← 🔑 Key field
+
+Cluster URL         https://kubernetes.default.svc
+Namespace           python-app
+
+VALUES FILES        values.yaml
+
+=> Create => Sync => SYNCHRONIZE
+    http://python-app.test.com:9080
+    http://python-app.test.com:9080/api/v1/info 
+    http://python-app.test.com:9080/api/v1/healthz
