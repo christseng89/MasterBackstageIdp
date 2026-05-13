@@ -90,17 +90,29 @@ kubectl delete -f k8s/python-app.yaml
 kubectl get all
 ```
 
+## Helm Install Nginx Ingress Controller
+
+```cmd
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace -f charts\nginx\values-nginx.yaml
+
+kubectl get svc -n ingress-nginx | grep 9080
+curl http://localhost:9080 
+
+```
+
 ## Helm Install python-app
 
 ```cmd
 docker tag christseng89/python-app:latest christseng89/python-app:v2
 docker push christseng89/python-app:v2
 
-helm install python-app k8s/charts/python-app --dry-run --debug
-helm install python-app k8s/charts/python-app --set image.tag=v2
+helm install python-app k8s\charts\python-app --dry-run --debug
+helm install python-app k8s\charts\python-app --set image.tag=v2
 
-helm list -n python-app
-kubectl get all -n python-app
+helm ls
+kubectl get all 
 
 curl http://python-app.test.com:9080
 curl http://python-app.test.com:9080/api/v1/info
@@ -115,5 +127,41 @@ helm uninstall python-app
 
 ```cmd helm install with Namespace
 helm install python-app k8s/charts/python-app --set image.tag=v2 -n python-app --create-namespace
+
+helm ls -n python-app
+kubectl get all -n python-app
+
+curl http://python-app.test.com:9080
+curl http://python-app.test.com:9080/api/v1/info
+curl http://python-app.test.com:9080/api/v1/healthz
+
 helm uninstall python-app -n python-app
+```
+
+## ArgoCD
+
+<https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd>
+
+
+```powershell
+Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 argocd.test.com"
+```
+ 
+```cmd
+helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace -f charts\argocd\values-argo.yaml
+
+kubectl get ingress -n argocd
+curl -iS http://argocd.test.com:9080
+
+```
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+    Yy9Z7X4V0fF4D0cU
+```
+
+```browser
+http://argocd.test.com:9080
+    Username: admin
+    Password: Yy9Z7X4V0fF4D0cU
 ```

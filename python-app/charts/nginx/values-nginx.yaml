@@ -1,0 +1,17 @@
+controller:
+  service:
+    type: LoadBalancer
+    ports:
+      http: 9080
+      https: 9443
+    targetPorts:
+      http: http
+      https: https
+
+  # Docker Desktop doesn't need election — single node
+  electionID: ingress-nginx-leader
+
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: true

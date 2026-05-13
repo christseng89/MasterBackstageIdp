@@ -7,7 +7,10 @@
       "Bash(git commit *)",
       "PowerShell(Get-ChildItem -Path \"D:\\\\development\\\\MasterBackstageIdp\" -Force | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"Directory\"}else{\"File\"}}} | Format-Table -AutoSize)",
       "PowerShell(tree \"D:\\\\development\\\\MasterBackstageIdp\\\\python-app\" -L 3)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(code *)",
+      "PowerShell(code *)",
+      "PowerShell(& \"C:\\\\Users\\\\samfi\\\\AppData\\\\Local\\\\Programs\\\\Microsoft VS Code\\\\bin\\\\code.cmd\" --list-extensions 2>&1)"
     ]
   }
 }
