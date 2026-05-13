@@ -206,3 +206,19 @@ VALUES FILES        values.yaml
     http://python-app.test.com:9080
     http://python-app.test.com:9080/api/v1/info 
     http://python-app.test.com:9080/api/v1/healthz
+
+## GitHub Actions
+
+<https://github.com/docker/build-push-action>
+<https://github.com/christseng89/MasterBackstageIdp> => 
+
+- Settings -> Actions -> General => Allow all actions and reusable workflows ✅
+- Settings -> Secrets and variables => Actions => New repository secret
+
+- Name: DOCKER_USERNAME
+- Value: christseng89
+
+- Name: DOCKER_TOKEN
+- Value: <Your Docker Hub Token>
+
+```yaml
