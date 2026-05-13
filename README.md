@@ -209,6 +209,16 @@ VALUES FILES        values.yaml
 
 ## GitHub Actions
 
+### Docker Hub Create Access Token
+
+Create access token
+
+- Access token description => MasterBackstageIdp
+- Expiration date => None
+- Access permissions => **Read, Write, Delete**
+
+### GitHub Actions Settings
+
 <https://github.com/docker/build-push-action>
 <https://github.com/christseng89/MasterBackstageIdp> => 
 
