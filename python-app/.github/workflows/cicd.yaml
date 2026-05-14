@@ -59,13 +59,13 @@ jobs:
           curl -ksSL -o argocd https://argocd-server.argocd/download/argocd-linux-amd64
           chmod +x argocd
           sudo mv ./argocd /usr/local/bin/argocd
-
+          
       - name: Argocd app sync
         shell: bash
         run: |
           argocd login argocd.test.com:9080 \
-            --insecure \
+            --plaintext \
             --grpc-web \
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }}
-          argocd app sync python-app          
+          argocd app sync python-app
