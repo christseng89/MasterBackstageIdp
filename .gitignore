@@ -69,3 +69,5 @@ python-app/charts/*/*.tgz
 !python-app/k8s/
 !python-app/.github/
 !python-app/README.md
+
+actions-runner/

@@ -239,3 +239,47 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 - Settings -> Secrets and variables => Actions => Secrets =>New repository secret
     - Name: ARGOCD_PASSWORD
     - Value: Yy9Z7X4V0fF4D0cU
+
+- Settings → Actions → General → Workflow permissions -> "Read and write permissions"
+
+### Step 0: Install ArgoCD CLI
+
+```cmd
+choco install argocd-cli
+argocd version
+    argocd: v3.4.2+0dc6b1b
+    BuildDate: 2026-05-12T21:00:01Z
+    GitCommit: 0dc6b1b57dd5bb925d5b03c3d09419ab9fb4225e
+    GitTreeState: clean
+    GoVersion: go1.26.0
+    Compiler: gc
+    Platform: windows/amd64
+    {"level":"fatal","msg":"Argo CD server address unspecified","time":"2026-05-14T20:24:49+08:00"}
+
+```
+
+### Step 1: Register Self-Hosted Runner via Git Bash on Windows
+
+```bash
+# Create folder and enter it (relative to wherever Git Bash is opened, e.g. your home ~)
+mkdir -p actions-runner && cd actions-runner
+
+# Download the runner package
+curl -L -o actions-runner-win-x64-2.334.0.zip \
+  https://github.com/actions/runner/releases/download/v2.334.0/actions-runner-win-x64-2.334.0.zip
+
+# Extract it (use PowerShell from Git Bash for unzip on Windows)
+powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; \
+  [System.IO.Compression.ZipFile]::ExtractToDirectory('$(pwd -W)\\actions-runner-win-x64-2.334.0.zip', '$(pwd -W)')"
+```
+
+### Step 2: Configure the Runner
+
+GitHub → Settings → Developer settings → Personal access tokens
+
+```bash
+# Configure the runner (replace with your own values)
+./config.cmd --url https://github.com/christseng89/MasterBackstageIdp --token AC7NNQC2IOUD6UVAN5FPDV3KAXEMA
+
+./run.cmd
+```

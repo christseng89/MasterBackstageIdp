@@ -15,7 +15,9 @@
       "Bash(git -C backstage remote get-url origin)",
       "Bash(git -C charts remote get-url origin)",
       "WebFetch(domain:docs.github.com)",
-      "Bash(git -C \"d:\\\\development\\\\MasterBackstageIdp\" submodule status)"
+      "Bash(git -C \"d:\\\\development\\\\MasterBackstageIdp\" submodule status)",
+      "Bash(git pull *)",
+      "Bash(git stash *)"
     ]
   }
 }
