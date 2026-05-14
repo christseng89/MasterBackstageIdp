@@ -63,8 +63,8 @@ jobs:
       - name: Argocd app sync
         shell: bash
         run: |
-          argocd login argocd.test.com:9080 \
-            --plaintext \
+          argocd login argocd.test.com:9443 \
+            --insecure \
             --grpc-web \
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }}
