@@ -1,6 +1,6 @@
 replicaCount: 1
 image:
-  repository: ricardoandre9707/python-app
+  repository: christseng89/python-app
   pullPolicy: IfNotPresent
   tag: ed7159
 imagePullSecrets: []

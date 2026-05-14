@@ -52,7 +52,7 @@ mkdocs serve   # preview at http://localhost:8000
 
 The CI/CD flow is fully GitOps (workflow: `python-app/.github/workflows/cicd.yaml`):
 
-1. **CI** (`ubuntu-latest`): triggered on pushes to `src/**` on `main`. Builds and pushes a Docker image to Docker Hub tagged with the first 6 chars of the commit SHA (`ricardoandre9707/python-app:<commit_id>`).
+1. **CI** (`ubuntu-latest`): triggered on pushes to `src/**` on `main`. Builds and pushes a Docker image to Docker Hub tagged with the first 6 chars of the commit SHA (`christseng89/python-app:<commit_id>`).
 2. **CD** (`self-hosted` runner): updates `charts/python-app/values.yaml` → `image.tag` (in the `charts/` submodule at repo root) with the new commit ID, commits it back, then triggers `argocd app sync python-app`.
 3. **ArgoCD** watches the repo and reconciles the cluster state from `charts/python-app/values.yaml`.
 
