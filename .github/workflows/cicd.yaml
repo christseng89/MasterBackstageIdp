@@ -70,9 +70,10 @@ jobs:
       - name: Argocd app sync
         shell: bash
         run: |
-          argocd login argocd.test.com:9080 \
+          argocd login argocd.test.com:9443 \
             --insecure \
             --grpc-web \
+            --skip-test-tls \
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }}
           argocd app sync python-app
