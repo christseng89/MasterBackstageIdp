@@ -223,12 +223,13 @@ Create access token
 <https://github.com/christseng89/MasterBackstageIdp> => 
 
 - Settings -> Actions -> General => Allow all actions and reusable workflows ✅
-- Settings -> Secrets and variables => Actions => New repository secret
+- Settings -> Secrets and variables => Actions => Secrets =>New repository secret
+    - Name: DOCKER_USERNAME
+    - Value: christseng89
 
-- Name: DOCKER_USERNAME
-- Value: christseng89
+    - Name: DOCKER_TOKEN
+    - Value: <Your Docker Hub Token>
 
-- Name: DOCKER_TOKEN
-- Value: <Your Docker Hub Token>
-
-```yaml
+- Settings -> Secrets and variables => Actions => Variables =>New repository variable
+    - Name: FORCE_JAVASCRIPT_ACTIONS_TO_NODE24
+    - Value: true

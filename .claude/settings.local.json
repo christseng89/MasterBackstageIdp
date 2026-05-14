@@ -13,7 +13,8 @@
       "PowerShell(& \"C:\\\\Users\\\\samfi\\\\AppData\\\\Local\\\\Programs\\\\Microsoft VS Code\\\\bin\\\\code.cmd\" --list-extensions 2>&1)",
       "Bash(git submodule *)",
       "Bash(git -C backstage remote get-url origin)",
-      "Bash(git -C charts remote get-url origin)"
+      "Bash(git -C charts remote get-url origin)",
+      "WebFetch(domain:docs.github.com)"
     ]
   }
 }
