@@ -1,0 +1,7 @@
+[submodule "backstage"]
+	path = backstage
+	url = https://github.com/christseng89/backstage.git
+
+[submodule "charts"]
+	path = charts
+	url = https://github.com/christseng89/charts.git
