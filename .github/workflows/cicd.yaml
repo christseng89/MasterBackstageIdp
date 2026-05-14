@@ -3,7 +3,7 @@ name: cicd
 on:
   push:
     paths:
-      - python-app/src/**
+      - python-app/src/**h
     branches:
       - main
 
@@ -47,7 +47,7 @@ jobs:
 
   cd:
     needs: ci
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
 
       - uses: actions/checkout@v3
