@@ -13,6 +13,9 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    outputs:
+      commit_id: ${{ env.COMMIT_ID }}
+          
     steps:
 
       - name: Checkout
@@ -41,8 +44,6 @@ jobs:
           push: true
           provenance: false
           tags: christseng89/python-app:${{ env.COMMIT_ID }}
-    outputs:
-      commit_id: ${{ env.COMMIT_ID }}
 
   cd:
     needs: ci
