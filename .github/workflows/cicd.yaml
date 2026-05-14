@@ -15,19 +15,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       commit_id: ${{ env.COMMIT_ID }}
-          
+
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Shorten commit id
         shell: bash
         # COMMIT_ID = the shortened 6-character version, derived from GITHUB_SHA (the full 40-character git commit hash)
         # BRANCH_NAME = could be used to identify staging such as "staging" or "production" such as "main"
         run: |
           echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
-                
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -47,15 +47,16 @@ jobs:
 
   cd:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
 
       - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Modify values file
         shell: bash
         run: |
-          echo ${{needs.ci.outputs.commit_id}}
           pip install yq
           cd python-app
           yq -Yi '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
@@ -64,20 +65,14 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           message: 'Updates values.yaml with commit ${{needs.ci.outputs.commit_id}}'
-
-      - name: Install argocd
-        shell: bash
-        run: |
-          curl -ksSL -o argocd https://argocd-server.argocd/download/argocd-linux-amd64
-          chmod +x argocd
-          sudo mv ./argocd /usr/local/bin/argocd
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Argocd app sync
         shell: bash
         run: |
           argocd login argocd-server.argocd \
-            --insecure  \
+            --insecure \
             --grpc-web \
             --username admin \
-            --password  ${{ secrets.ARGOCD_PASSWORD }}
+            --password ${{ secrets.ARGOCD_PASSWORD }}
           argocd app sync python-app
