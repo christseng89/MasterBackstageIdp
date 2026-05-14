@@ -1,5 +1,0 @@
-# .github/actions/my-action/action.yml
-name: My Custom Action
-runs:
-  using: "node24"
-  main: "main.js"
