@@ -217,7 +217,9 @@ Create access token
 - Expiration date => None
 - Access permissions => **Read & Write**
 
-### GitHub Actions Settings
+### GitHub Actions Workflow - CI
+
+.github/workflows/cicd.yaml
 
 <https://github.com/docker/build-push-action>
 <https://github.com/christseng89/MasterBackstageIdp> => 
@@ -229,3 +231,11 @@ Create access token
 
     - Name: DOCKER_TOKEN
     - Value: <Your Docker Hub Token>
+
+### GitHub Actions Workflow - CD
+
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
+- Settings -> Secrets and variables => Actions => Secrets =>New repository secret
+    - Name: ARGOCD_PASSWORD
+    - Value: Yy9Z7X4V0fF4D0cU
