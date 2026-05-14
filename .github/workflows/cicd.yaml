@@ -14,12 +14,13 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Shorten commit id
         shell: bash
         run: |
           echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
 
+      - name: Run my custom action
+        uses: ./.github/actions/my-custom-action                   
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

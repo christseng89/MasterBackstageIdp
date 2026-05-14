@@ -229,7 +229,3 @@ Create access token
 
     - Name: DOCKER_TOKEN
     - Value: <Your Docker Hub Token>
-
-- Settings -> Secrets and variables => Actions => Variables =>New repository variable
-    - Name: FORCE_JAVASCRIPT_ACTIONS_TO_NODE24
-    - Value: true
