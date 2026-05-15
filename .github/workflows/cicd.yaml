@@ -9,6 +9,10 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Pin CLI versions used by the CD job so reproducibility doesn't depend on
+  # whatever happens to be tagged `latest` on the upstream release.
+  ARGOCD_VERSION: v3.4.2
+  YQ_VERSION: v4.44.3
 
 jobs:
   ci:
@@ -74,7 +78,7 @@ jobs:
       - name: Modify values file
         shell: bash
         run: |
-          curl -sL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${{ steps.arch.outputs.tag }}" -o /tmp/yq
+          curl -sL "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_${{ steps.arch.outputs.tag }}" -o /tmp/yq
           chmod +x /tmp/yq
           cd python-app
           /tmp/yq -i '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
@@ -91,17 +95,22 @@ jobs:
       - name: Install ArgoCD CLI
         shell: bash
         run: |
-          curl -sSL -o /tmp/argocd "https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-${{ steps.arch.outputs.tag }}"
+          curl -sSL -o /tmp/argocd "https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-${{ steps.arch.outputs.tag }}"
           chmod +x /tmp/argocd
           /tmp/argocd version --client
 
       - name: Argocd app sync
         shell: bash
         run: |
+          # --plaintext: argocd-server has `server.insecure: true`, so it answers
+          # in plain HTTP. Without this flag the CLI hits an interactive
+          # "server is not configured with TLS. Proceed (y/n)?" prompt and
+          # fatals with EOF (exit code 20) in a non-interactive shell.
+          # Default port with --plaintext is 80, which matches the service.
           /tmp/argocd login argocd-server.argocd.svc.cluster.local \
-            --insecure \
+            --plaintext \
             --grpc-web \
             --username admin \
-            --password ${{ secrets.ARGOCD_PASSWORD }}
+            --password "${{ secrets.ARGOCD_PASSWORD }}"
           /tmp/argocd app sync python-app
           /tmp/argocd app wait python-app --health --timeout 180
