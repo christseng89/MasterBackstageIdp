@@ -28,6 +28,11 @@ jobs:
         run: |
           echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
 
+      # Required so the amd64 GitHub runner can build an arm64 layer for
+      # Surface Pro 11 / Apple Silicon developers via cross-architecture emulation.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -43,6 +48,10 @@ jobs:
           context: python-app
           push: true
           provenance: false
+          # Multi-arch: amd64 for cloud / Intel dev boxes, arm64 for Apple Silicon
+          # and Snapdragon X (Surface Pro 11). Without this the image is amd64-only
+          # and ARM64 nodes crash with "exec format error".
+          platforms: linux/amd64,linux/arm64
           tags: christseng89/python-app:${{ env.COMMIT_ID }}
 
   cd:
