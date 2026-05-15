@@ -330,7 +330,7 @@ argocd version
 
 (The `fatal` line is expected when `argocd version` runs without a configured server — the workflow itself handles the login.)
 
-## Register the Self-Hosted Runner
+## Register the Self-Hosted Runner #1
 
 GitHub → **Settings → Actions → Runners → New self-hosted runner**
 
@@ -351,10 +351,37 @@ powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; \
 
 **Configure and start the runner** (replace the token with the one GitHub shows you on the *New self-hosted runner* page — it rotates):
 
-```bash
+```bash (configure only the first time; skip if already done)
 ./config.cmd --url https://github.com/christseng89/MasterBackstageIdp --token AC7NNQC2IOUD6UVAN5FPDV3KAXEMA
+```
 
+```bash (keep this running in the background to listen for jobs after configuration)
 ./run.cmd
+```
+
+## Register the Self-Hosted Runner #2 - Action Runner Controller 
+
+<https://github.com/actions/actions-runner-controller> => Quickstart Guide
+
+```bash
+# Install cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+kubectl get po -n cert-manager  
+
+# Deploy and Configure ARC
+helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
+
+helm upgrade --install --namespace actions-runner-system --create-namespace\
+  --set=authSecret.create=true\
+  --set=authSecret.github_token="<YOUR_GITHUB_PAT>"\
+  --wait actions-runner-controller actions-runner-controller/actions-runner-controller
+
+# Create the GitHub self hosted runners via Kubernetes manifests
+kubectl apply -f python-app/runnerdeployment.yaml
+kubectl get runners
+kubectl get po
+    NAME                               READY   STATUS    RESTARTS   AGE
+    example-runnerdeploy-p5j5h-cvr9x   2/2     Running   0          10m
 ```
 
 ---
@@ -384,5 +411,3 @@ After everything above is in place, a code change in `python-app/src/**` should 
    ```cmd
    curl http://python-app.test.com:9080/api/v1/info
    ```
-
-If the response still shows the old message, the most common cause is an ArgoCD `Path` that doesn't match `python-app/charts/python-app/` — re-check Part 4.
