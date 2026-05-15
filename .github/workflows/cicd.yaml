@@ -55,7 +55,7 @@ jobs:
 
   cd:
     needs: ci
-    runs-on: [self-hosted, linux]
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
         with:
@@ -78,12 +78,10 @@ jobs:
       - name: Argocd app sync
         shell: bash
         run: |
-          curl -sL https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 -o /tmp/argocd
-          chmod +x /tmp/argocd
-          /tmp/argocd login argocd.test.com:9443 \
+          argocd login argocd.test.com:9443 \
             --insecure \
             --grpc-web \
             --skip-test-tls \
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }}
-          /tmp/argocd app sync python-app
+          argocd app sync python-app
