@@ -61,10 +61,20 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Detect runner architecture
+        id: arch
+        shell: bash
+        run: |
+          case "$(uname -m)" in
+            x86_64)  echo "tag=amd64" >> "$GITHUB_OUTPUT" ;;
+            aarch64) echo "tag=arm64" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Unsupported arch $(uname -m)"; exit 1 ;;
+          esac
+
       - name: Modify values file
         shell: bash
         run: |
-          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /tmp/yq
+          curl -sL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${{ steps.arch.outputs.tag }}" -o /tmp/yq
           chmod +x /tmp/yq
           cd python-app
           /tmp/yq -i '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
@@ -75,13 +85,23 @@ jobs:
           message: "Updates values.yaml with commit ${{needs.ci.outputs.commit_id}}"
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ARC runner pods don't have the argocd CLI pre-installed, so fetch it.
+      # The in-cluster service DNS is used because argocd.test.com only resolves
+      # via the Windows hosts file, which the runner pod can't see.
+      - name: Install ArgoCD CLI
+        shell: bash
+        run: |
+          curl -sSL -o /tmp/argocd "https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-${{ steps.arch.outputs.tag }}"
+          chmod +x /tmp/argocd
+          /tmp/argocd version --client
+
       - name: Argocd app sync
         shell: bash
         run: |
-          argocd login argocd.test.com:9443 \
+          /tmp/argocd login argocd-server.argocd.svc.cluster.local \
             --insecure \
             --grpc-web \
-            --skip-test-tls \
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }}
-          argocd app sync python-app
+          /tmp/argocd app sync python-app
+          /tmp/argocd app wait python-app --health --timeout 180
