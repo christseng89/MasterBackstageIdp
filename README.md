@@ -500,6 +500,9 @@ With everything from Parts 1–5 in place, a single code edit should flow all th
    curl http://python-app.test.com:9080/api/v1/info
    ```
 
+6. git config --global pull.rebase true
+   git pull
+    
 ---
 
 ## Part 7 — Cleanup
