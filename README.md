@@ -462,12 +462,13 @@ kubectl get po
 Expected output for the pods (the suffix will differ):
 
 ```text
-NAME                               READY   STATUS    RESTARTS   AGE
-example-runnerdeploy-p5j5h-cvr9x   2/2     Running   0          10m
+NAME                             READY   STATUS    RESTARTS   AGE
+self-hosted-runner-vbb92-mrcmr   2/2     Running   0          36m
 ```
 
 In GitHub → **Settings → Actions → Runners** the new runner should appear with status **Idle**, ready to accept jobs.
 
+- self-hosted-runner-vbb92-mrcmr (self-hosted, linux) - Idle
 ---
 
 ## Part 6 — Verify the Pipeline End-to-End
