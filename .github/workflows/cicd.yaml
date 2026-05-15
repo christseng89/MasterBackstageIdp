@@ -12,7 +12,7 @@ env:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     outputs:
       commit_id: ${{ env.COMMIT_ID }}
 
