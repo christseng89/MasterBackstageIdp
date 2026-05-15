@@ -251,8 +251,7 @@ In ArgoCD → **Applications → New App**:
 |---|---|
 | Application Name | `python-app` ✅ |
 | Project Name | `default` ✅ |
-| Sync Policy | Automatic |
-| Enable Auto-Sync | ✅ Checked |
+| Sync Policy | Manual |
 | Sync Options | ✅ Auto-Create Namespace |
 | Repository URL | `https://github.com/christseng89/MasterBackstageIdp.git` |
 | Revision | `main` ← 🔑 any branch, tag, or commit |
