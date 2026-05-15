@@ -78,10 +78,12 @@ jobs:
       - name: Argocd app sync
         shell: bash
         run: |
-          argocd login argocd.test.com:9443 \
+          curl -sL https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 -o /tmp/argocd
+          chmod +x /tmp/argocd
+          /tmp/argocd login argocd.test.com:9443 \
             --insecure \
             --grpc-web \
             --skip-test-tls \
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }}
-          argocd app sync python-app
+          /tmp/argocd app sync python-app
