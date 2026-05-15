@@ -85,7 +85,3 @@ jobs:
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }}
           argocd app sync python-app
-
-        #  curl -sL https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 -o /tmp/argocd
-        #   chmod +x /tmp/argocd
-        #   /tmp/                 
