@@ -2,86 +2,88 @@ name: cicd
 
 on:
   push:
-    paths:
-      - python-app/src/**
-    branches:
-      - main
+      paths:
+            - python-app/src/**
+                branches:
+                      - main
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+                      env:
+                        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-jobs:
-  ci:
-    runs-on: [self-hosted, linux]
-    outputs:
-      commit_id: ${{ env.COMMIT_ID }}
+                        jobs:
+                          ci:
+                              runs-on: [self-hosted, linux]
+                                  outputs:
+                                        commit_id: ${{ env.COMMIT_ID }}
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+                                            steps:
+                                                  - name: Checkout
+                                                          uses: actions/checkout@v4
 
-      - name: Shorten commit id
-        shell: bash
-        # COMMIT_ID = the shortened 6-character version, derived from GITHUB_SHA (the full 40-character git commit hash)
-        # BRANCH_NAME = could be used to identify staging such as "staging" or "production" such as "main"
-        run: |
-          echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
-
-      # Required so the amd64 GitHub runner can build an arm64 layer for
-      # Surface Pro 11 / Apple Silicon developers via cross-architecture emulation.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: python-app
-          push: true
-          provenance: false
-          # Multi-arch: amd64 for cloud / Intel dev boxes, arm64 for Apple Silicon
-          # and Snapdragon X (Surface Pro 11). Without this the image is amd64-only
-          # and ARM64 nodes crash with "exec format error".
-          platforms: linux/amd64,linux/arm64
-          tags: christseng89/python-app:${{ env.COMMIT_ID }}
-
-  cd:
-    needs: ci
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Modify values file
-        shell: bash
-        run: |
-          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /tmp/yq
-          chmod +x /tmp/yq
-          cd python-app
-          /tmp/yq -i '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
-
-      - name: Commit changes
-        uses: EndBug/add-and-commit@v9
-        with:
-          message: "Updates values.yaml with commit ${{needs.ci.outputs.commit_id}}"
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Argocd app sync
-        shell: bash
-        run: |
-          argocd login argocd.test.com:9443 \
-            --insecure \
-            --grpc-web \
-            --skip-test-tls \
-            --username admin \
-            --password ${{ secrets.ARGOCD_PASSWORD }}
-          argocd app sync python-app
+                                                                - name: Shorten commit id
+                                                                        shell: bash
+                                                                                # COMMIT_ID = the shortened 6-character version, derived from GITHUB_SHA (the full 40-character git commit hash)
+                                                                                        # BRANCH_NAME = could be used to identify staging such as "staging" or "production" such as "main"
+                                                                                                run: |
+                                                                                                          echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
+                                                                                                          
+                                                                                                                # Required so the amd64 GitHub runner can build an arm64 layer for
+                                                                                                                      # Surface Pro 11 / Apple Silicon developers via cross-architecture emulation.
+                                                                                                                            - name: Set up QEMU
+                                                                                                                                    uses: docker/setup-qemu-action@v3
+                                                                                                                                    
+                                                                                                                                          - name: Set up Docker Buildx
+                                                                                                                                                  uses: docker/setup-buildx-action@v3
+                                                                                                                                                  
+                                                                                                                                                        - name: Login to Docker Hub
+                                                                                                                                                                uses: docker/login-action@v3
+                                                                                                                                                                        with:
+                                                                                                                                                                                  username: ${{ secrets.DOCKERHUB_USERNAME }}
+                                                                                                                                                                                            password: ${{ secrets.DOCKERHUB_TOKEN }}
+                                                                                                                                                                                            
+                                                                                                                                                                                                  - name: Build and push
+                                                                                                                                                                                                          uses: docker/build-push-action@v6
+                                                                                                                                                                                                                  with:
+                                                                                                                                                                                                                            context: python-app
+                                                                                                                                                                                                                                      push: true
+                                                                                                                                                                                                                                                provenance: false
+                                                                                                                                                                                                                                                          # Multi-arch: amd64 for cloud / Intel dev boxes, arm64 for Apple Silicon
+                                                                                                                                                                                                                                                                    # and Snapdragon X (Surface Pro 11). Without this the image is amd64-only
+                                                                                                                                                                                                                                                                              # and ARM64 nodes crash with "exec format error".
+                                                                                                                                                                                                                                                                                        platforms: linux/amd64,linux/arm64
+                                                                                                                                                                                                                                                                                                  tags: christseng89/python-app:${{ env.COMMIT_ID }}
+                                                                                                                                                                                                                                                                                                  
+                                                                                                                                                                                                                                                                                                    cd:
+                                                                                                                                                                                                                                                                                                        needs: ci
+                                                                                                                                                                                                                                                                                                            runs-on: [self-hosted, linux]
+                                                                                                                                                                                                                                                                                                                steps:
+                                                                                                                                                                                                                                                                                                                      - uses: actions/checkout@v3
+                                                                                                                                                                                                                                                                                                                              with:
+                                                                                                                                                                                                                                                                                                                                        token: ${{ secrets.GITHUB_TOKEN }}
+                                                                                                                                                                                                                                                                                                                                        
+                                                                                                                                                                                                                                                                                                                                              - name: Modify values file
+                                                                                                                                                                                                                                                                                                                                                      shell: bash
+                                                                                                                                                                                                                                                                                                                                                              run: |
+                                                                                                                                                                                                                                                                                                                                                                        curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /tmp/yq
+                                                                                                                                                                                                                                                                                                                                                                                  chmod +x /tmp/yq
+                                                                                                                                                                                                                                                                                                                                                                                            cd python-app
+                                                                                                                                                                                                                                                                                                                                                                                                      /tmp/yq -i '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
+                                                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                                                            - name: Commit changes
+                                                                                                                                                                                                                                                                                                                                                                                                                    uses: EndBug/add-and-commit@v9
+                                                                                                                                                                                                                                                                                                                                                                                                                            with:
+                                                                                                                                                                                                                                                                                                                                                                                                                                      message: "Updates values.yaml with commit ${{needs.ci.outputs.commit_id}}"
+                                                                                                                                                                                                                                                                                                                                                                                                                                                github_token: ${{ secrets.GITHUB_TOKEN }}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                                                                      - name: Argocd app sync
+                                                                                                                                                                                                                                                                                                                                                                                                                                                              shell: bash
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                      run: |
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                curl -sL https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 -o /tmp/argocd
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          chmod +x /tmp/argocd
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    /tmp/argocd login argocd.test.com:9443 \
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                --insecure \
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            --grpc-web \
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        --skip-test-tls \
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    --username admin \
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                --password ${{ secrets.ARGOCD_PASSWORD }}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          /tmp/argocd app sync python-app
