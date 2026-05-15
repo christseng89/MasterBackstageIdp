@@ -28,3 +28,22 @@ powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; \
 ```bash (keep this running in the background to listen for jobs after configuration)
 ./run.cmd
 ```
+
+## Install ArgoCD CLI on the Runner Host
+
+The `cd` job calls `argocd login` and `argocd app sync`, so the CLI must exist on the self-hosted runner machine.
+
+```cmd
+choco install argocd-cli
+argocd version
+    argocd: v3.4.2+0dc6b1b
+    BuildDate: 2026-05-12T21:00:01Z
+    GitCommit: 0dc6b1b57dd5bb925d5b03c3d09419ab9fb4225e
+    GitTreeState: clean
+    GoVersion: go1.26.0
+    Compiler: gc
+    Platform: windows/amd64
+    {"level":"fatal","msg":"Argo CD server address unspecified","time":"2026-05-14T20:24:49+08:00"}
+```
+
+(The `fatal` line is expected when `argocd version` runs without a configured server — the workflow itself handles the login.)

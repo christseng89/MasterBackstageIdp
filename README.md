@@ -1,71 +1,148 @@
 # Master Backstage IdP
 
-A learning project that walks an internal developer-portal (IDP) workflow end‑to‑end: a Python microservice → Docker image → Helm chart → ArgoCD → Kubernetes, with the service registered in a Backstage catalog and a GitHub Actions pipeline doing the source‑to‑cluster handoff.
+A hands-on learning project that walks the full **Internal Developer Portal (IDP)** workflow end-to-end:
+
+> Source code → Docker image → Helm chart → ArgoCD → Kubernetes — with the service registered in a Backstage catalog and a GitHub Actions pipeline orchestrating every step.
+
+The result is a tight feedback loop where editing `python-app/src/app.py` and pushing to `main` automatically builds a new container image, updates the Helm values, syncs ArgoCD, and rolls out a new pod — all without any manual `kubectl` or `docker` commands.
+
+## Architecture at a Glance
+
+```text
+┌─────────────┐  push   ┌──────────────────┐  build   ┌─────────────┐
+│  Developer  │ ──────▶ │  GitHub (main)   │ ───────▶ │  Docker Hub │
+└─────────────┘         └──────────────────┘   image  └─────────────┘
+                              │                              │
+                              │ workflow:                     │ pull
+                              │  bumps image.tag              │
+                              ▼                              ▼
+                        ┌──────────────────┐  sync   ┌─────────────┐
+                        │ charts/.../values│ ──────▶ │   ArgoCD    │
+                        └──────────────────┘         └──────┬──────┘
+                                                            │ apply
+                                                            ▼
+                                                    ┌─────────────┐
+                                                    │ Kubernetes  │
+                                                    │ (python-app)│
+                                                    └─────────────┘
+```
 
 ## Repository Layout
 
 | Path | Purpose |
 |---|---|
 | `python-app/src/` | Flask app source — every push here triggers CI/CD |
-| `python-app/Dockerfile` | Container image definition |
+| `python-app/Dockerfile` | Container image definition (multi-arch via QEMU) |
 | `python-app/charts/python-app/` | **The** Helm chart — ArgoCD watches this, CI/CD updates `values.yaml` here |
 | `python-app/charts/nginx/` | Values override for the Nginx Ingress Controller install |
 | `python-app/charts/argocd/` | Values override for the ArgoCD install |
 | `python-app/k8s/` | Raw Kubernetes manifests (alternative to Helm, for direct `kubectl apply`) |
 | `python-app/catalog-info.yaml` | Backstage catalog registration |
-| `.github/workflows/cicd.yaml` | The authoritative GitHub Actions workflow |
+| `python-app/runnerdeployment.yaml` | ARC self-hosted runner manifest |
+| `.github/workflows/cicd.yaml` | Authoritative GitHub Actions workflow |
 | `backstage/` | Backstage app (Git submodule) |
 | `charts/` | Backstage Helm chart fork (Git submodule, unrelated to python-app) |
 
+## Prerequisites
+
+Tested on Windows 11 (Surface Pro 11 / Snapdragon X, ARM64) with Docker Desktop. Other Linux / macOS hosts work with minor command translation (paths, `Add-Content` → `echo … >> /etc/hosts`).
+
+| Tool | Version | Purpose |
+|---|---|---|
+| Docker Desktop | latest, with Kubernetes enabled | Container runtime + local k8s cluster |
+| `kubectl` | matches your cluster | Cluster CLI |
+| `helm` | 3.x | Chart installer |
+| Python | 3.12.10 (via `pyenv`) | Local app dev |
+| `uv` | latest | Python dependency manager |
+| Git | 2.40+ | Submodule support |
+| A Docker Hub account | — | Image registry |
+| A GitHub account with admin on this repo | — | Actions secrets + ARC PAT |
+
+> Throughout this guide, replace `christseng89` with your own Docker Hub and GitHub username wherever it appears.
+
 ---
 
-# Part 1 — Local Development
+## Part 1 — Clone & Local Development
 
-## Run the Python App Locally
+### Clone the Repository
 
 ```cmd
-git clone https://github.com/christseng89/backstage.git
-git clone https://github.com/christseng89/python-app
+git clone --recurse-submodules https://github.com/christseng89/MasterBackstageIdp.git
+cd MasterBackstageIdp
+```
 
+If you cloned without `--recurse-submodules`, initialize the submodules afterwards:
+
+```cmd
+git submodule update --init --recursive
+```
+
+### Run the Python App Locally
+
+```cmd
 cd python-app
-uv init
-pyenv global 3.12.10
 pyenv local 3.12.10
 
 uv sync
 uv pip install -r requirements.txt
 
 uv run main.py
-    Hello from python-app!
-
-uv run src\app.py
-    http://127.0.0.1:5000
-    http://127.0.0.1:5000/api/v1/info
-    http://127.0.0.1:5000/api/v1/healthz
 ```
 
-## Build & Run with Docker
+Expected output:
+
+```text
+Hello from python-app!
+```
+
+Run the Flask server directly:
+
+```cmd
+uv run src\app.py
+```
+
+Then visit:
+
+- <http://127.0.0.1:5000>
+- <http://127.0.0.1:5000/api/v1/info>
+- <http://127.0.0.1:5000/api/v1/healthz>
+
+### Build & Run with Docker
 
 ```cmd
 cd python-app
 docker build -t python-app:latest .
 docker run -d -p 5000:5000 --name python-app python-app:latest
-    http://127.0.0.1:5000
-    http://127.0.0.1:5000/api/v1/info
-    http://127.0.0.1:5000/api/v1/healthz
+```
 
+Verify the running container:
+
+```cmd
+curl http://127.0.0.1:5000/api/v1/info
+curl http://127.0.0.1:5000/api/v1/healthz
+```
+
+Inspect from inside the container:
+
+```cmd
 docker exec -it python-app sh
-    apk add curl
-    curl http://localhost:5000
-    curl http://localhost:5000/api/v1/info
-    curl http://localhost:5000/api/v1/healthz
+```
 
+```sh
+apk add curl
+curl http://localhost:5000/api/v1/info
+exit
+```
+
+Tear it down:
+
+```cmd
 docker logs python-app
 docker stop python-app
 docker rm python-app
 ```
 
-Push the local image to Docker Hub:
+Push the image to Docker Hub (requires `docker login` first):
 
 ```cmd
 docker tag python-app:latest christseng89/python-app:latest
@@ -74,66 +151,77 @@ docker push christseng89/python-app:latest
 
 ---
 
-# Part 2 — Kubernetes Cluster Setup
+## Part 2 — Kubernetes Cluster Setup
 
-## Sanity-check the Cluster
+### Sanity-check the Cluster
 
 ```cmd
 kubectl cluster-info
 kubectl get nodes
-
 kubectl get ns
-kubectl get pod
-kubectl get svc -A
-kubectl get deployment -A
-kubectl get ingress -A
-
-kubectl get po -n ingress-nginx
 ```
 
-## Local DNS Entries
+You should see `docker-desktop` as the only node and the standard system namespaces.
 
-Add the hostnames the manifests and ArgoCD UI expect:
+### Configure Local DNS
+
+The ingress rules expose hostnames `python-app.test.com` and `argocd.test.com`. Map them to your loopback so your browser can reach them through the local Nginx ingress.
+
+PowerShell (as Administrator):
 
 ```powershell
-# Run as Administrator
 Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 python-app.test.com"
 Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 argocd.test.com"
 ```
 
-Or edit by hand:
+Or edit the file by hand:
 
 ```cmd
 notepad C:\Windows\System32\drivers\etc\hosts
-    127.0.0.1       python-app.test.com
-    127.0.0.1       argocd.test.com
 ```
 
-## Install Nginx Ingress Controller
+Add:
 
-```cmd
+```text
+127.0.0.1       python-app.test.com
+127.0.0.1       argocd.test.com
+```
+
+### Install Nginx Ingress Controller
+
+```bash
+cd python-app
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
-helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace -f charts\nginx\values-nginx.yaml
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  -n ingress-nginx --create-namespace \
+  -f charts/nginx/values-nginx.yaml
+```
 
-kubectl get svc -n ingress-nginx | grep 9080
+Verify the controller is reachable on port 9080:
+
+```cmd
+kubectl get svc -n ingress-nginx
 curl http://localhost:9080
 ```
 
 ---
 
-# Part 3 — Deploy Python-App (Manual)
+## Part 3 — Manual Deployment (Learning Path)
 
-These are the manual paths — useful for learning and testing. The production path is GitOps via ArgoCD (Part 4).
+These are the manual paths for learning and ad-hoc testing. The production path is GitOps via ArgoCD (Part 4).
 
-## Method A — Raw `kubectl` Manifests
-
-Behind the local DNS entry:
+### Method A — Raw `kubectl` Manifests
 
 ```cmd
 cd python-app
 kubectl apply -f k8s/python-app.yaml
+kubectl get all
+```
 
+Verify behind the local DNS entry:
+
+```cmd
 curl http://python-app.test.com:9080
 curl http://python-app.test.com:9080/api/v1/info
 curl http://python-app.test.com:9080/api/v1/healthz
@@ -143,10 +231,9 @@ Tear it down:
 
 ```cmd
 kubectl delete -f k8s/python-app.yaml
-kubectl get all
 ```
 
-## Method B — Helm (Manual Install)
+### Method B — Helm (Manual Install)
 
 Tag and push a versioned image first:
 
@@ -155,7 +242,7 @@ docker tag christseng89/python-app:latest christseng89/python-app:v2
 docker push christseng89/python-app:v2
 ```
 
-Install into the `default` namespace:
+Install into the `default` namespace (dry-run first to inspect the rendered manifests):
 
 ```cmd
 helm install python-app charts\python-app --dry-run --debug
@@ -163,74 +250,73 @@ helm install python-app charts\python-app --set image.tag=v2
 
 helm ls
 kubectl get all
-
-curl http://python-app.test.com:9080
-curl http://python-app.test.com:9080/api/v1/info
-curl http://python-app.test.com:9080/api/v1/healthz
 ```
 
-Uninstall:
+Verify and uninstall:
 
 ```cmd
+curl http://python-app.test.com:9080/api/v1/info
 helm uninstall python-app
 ```
 
----
+Or install into a dedicated `python-app` namespace (matches the ArgoCD setup in Part 4):
 
-Or install into a dedicated `python-app` namespace:
-
-```cmd
-helm install python-app charts/python-app --set image.tag=v2 -n python-app --create-namespace
+```bash
+helm install python-app charts/python-app \
+  --set image.tag=v2 -n python-app --create-namespace
 
 helm ls -n python-app
 kubectl get all -n python-app
 
-curl http://python-app.test.com:9080
 curl http://python-app.test.com:9080/api/v1/info
-curl http://python-app.test.com:9080/api/v1/healthz
 
 helm uninstall python-app -n python-app
 ```
 
 ---
 
-# Part 4 — GitOps with ArgoCD
+## Part 4 — GitOps with ArgoCD
 
-## Install ArgoCD
+ArgoCD will watch the Helm chart in this repo and reconcile the cluster to match. Once configured, you should never need to run `helm install` manually again.
 
-<https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd>
+### Install ArgoCD
+
+Reference: <https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd>
+
+```bash
+cd python-app
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+helm upgrade --install argocd argo/argo-cd \
+  -n argocd --create-namespace \
+  -f charts/argocd/values-argo.yaml
+```
+
+Verify the ingress is up:
 
 ```cmd
-helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace -f charts\argocd\values-argo.yaml
-
 kubectl get ingress -n argocd
 curl http://argocd.test.com:9080
 ```
 
-Get the initial admin password:
+### Retrieve the Admin Password
 
 ```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-    Yy9Z7X4V0fF4D0cU
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d
 ```
 
-Log in via the browser:
+> Save this value — you'll need it for both the browser login and the `ARGOCD_PASSWORD` GitHub secret in Part 5.
 
-```
-http://argocd.test.com:9080
-    Username: admin
-    Password: Yy9Z7X4V0fF4D0cU
-```
+Log in via the browser at <http://argocd.test.com:9080> with username `admin` and the password you just retrieved.
 
-## Connect the Repository to ArgoCD
+### Connect the Repository
 
-📌 How to get a GitHub PAT (if you don't have one)
+You'll need a GitHub Personal Access Token (PAT) so ArgoCD can read this repo.
 
-1. Go to → <https://github.com/settings/tokens>
-2. Click **Generate new token (classic)**
-3. Note: `MasterBackstageIdp`
-4. Scopes: ✅ `repo` (full control)
-5. Click **Generate token** → copy it immediately
+1. Visit <https://github.com/settings/tokens> → **Generate new token (classic)**.
+2. Name: `MasterBackstageIdp`, scopes: `repo` (full control).
+3. Generate, then **copy immediately** — GitHub only shows it once.
 
 In ArgoCD → **Settings → Repositories → Connect Repo**:
 
@@ -241,139 +327,169 @@ In ArgoCD → **Settings → Repositories → Connect Repo**:
 | Project | `default` |
 | Repository URL | `https://github.com/christseng89/MasterBackstageIdp.git` |
 | Username | `christseng89` |
-| Password | _<your GitHub PAT>_ |
+| Password | _your GitHub PAT_ |
 
-## Create the python-app Application
+### Create the `python-app` Application
 
 In ArgoCD → **Applications → New App**:
 
 | Field | Value |
 |---|---|
-| Application Name | `python-app` ✅ |
-| Project Name | `default` ✅ |
-| Sync Policy | Manual |
-| Sync Options | ✅ Auto-Create Namespace |
+| Application Name | `python-app` |
+| Project | `default` |
+| **Sync Policy** | **Automatic** (with **Auto-Create Namespace** ✅) |
 | Repository URL | `https://github.com/christseng89/MasterBackstageIdp.git` |
-| Revision | `main` ← 🔑 any branch, tag, or commit |
-| **Path** | **`python-app/charts/python-app`** ← 🔑 MUST match the chart that CI/CD updates |
+| Revision | `main` |
+| **Path** | **`python-app/charts/python-app`** |
 | Cluster URL | `https://kubernetes.default.svc` |
 | Namespace | `python-app` |
 | Values Files | `values.yaml` |
 
-> ⚠️ The `Path` above **MUST** be `python-app/charts/python-app`. The CD job in
-> `.github/workflows/cicd.yaml` writes the new image tag into
-> `python-app/charts/python-app/values.yaml` after every successful build. If
-> ArgoCD is pointed at any other directory, `argocd app sync` will see no diff
-> and the pod will never roll out the new image.
+> ⚠️ **Critical:** the `Path` must exactly match `python-app/charts/python-app`. The CD job in `.github/workflows/cicd.yaml` writes the new image tag into `python-app/charts/python-app/values.yaml`. Any other path means `argocd app sync` sees no diff and the pod is never updated.
 
-Click **Create → Sync → SYNCHRONIZE**, then verify:
+Click **Create**, wait for the first sync, and verify:
 
-```
-http://python-app.test.com:9080
-http://python-app.test.com:9080/api/v1/info
-http://python-app.test.com:9080/api/v1/healthz
+```cmd
+curl http://python-app.test.com:9080
+curl http://python-app.test.com:9080/api/v1/info
+curl http://python-app.test.com:9080/api/v1/healthz
 ```
 
 ---
 
-# Part 5 — CI/CD Automation (GitHub Actions)
+## Part 5 — CI/CD Automation (GitHub Actions)
 
-The authoritative workflow is `.github/workflows/cicd.yaml`. The `ci` job runs on a GitHub-hosted `ubuntu-latest` runner; the `cd` job runs on your **self-hosted** Windows runner because it needs access to your local ArgoCD instance.
+The workflow at `.github/workflows/cicd.yaml` runs in two jobs on **self-hosted Linux runners** provisioned by [Actions Runner Controller (ARC)](https://github.com/actions/actions-runner-controller) inside this same Kubernetes cluster.
 
-## Repository Settings
+### How It Works
+
+```text
+push to main (changes under python-app/src/**)
+        │
+        ▼
+┌──────────────────────────────┐
+│  ci  (runs-on: ARC linux)    │
+│   1. Checkout                │
+│   2. Set up QEMU + Buildx    │
+│   3. Login to Docker Hub     │
+│   4. Build & push multi-arch │
+│      christseng89/python-app │
+│      :<commit-6>             │
+└──────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────┐
+│  cd  (runs-on: ARC linux)    │
+│   1. Checkout                │
+│   2. Detect runner arch      │
+│   3. yq -i values.yaml       │
+│      (bump image.tag)        │
+│   4. git commit & push       │
+│   5. argocd login (in-cluster│
+│      service DNS)            │
+│   6. argocd app sync         │
+│   7. argocd app wait healthy │
+└──────────────────────────────┘
+```
+
+> The `cd` job talks to ArgoCD via the in-cluster service DNS `argocd-server.argocd.svc.cluster.local`, **not** through `argocd.test.com:9080`. The ingress hostname only resolves on your laptop via the Windows hosts file, which ARC runner pods cannot see.
+
+> 💡 **`argocd-cli` is not required on your local machine** to run this pipeline — the CD job downloads its own pinned `argocd` binary on every run. Install it locally only if you want to query ArgoCD by hand from a terminal.
+
+### Step 1 — Repository Settings
 
 In GitHub → repository **Settings**:
 
 - **Actions → General → Allow all actions and reusable workflows** ✅
 - **Actions → General → Workflow permissions → Read and write permissions** ✅
-  (needed so the CD job's `EndBug/add-and-commit` can push the values.yaml bump back to `main`)
+  (required so the CD job's `EndBug/add-and-commit` action can push the updated `values.yaml` back to `main`)
 
-## Create a Docker Hub Access Token
+### Step 2 — Create a Docker Hub Access Token
 
-<https://hub.docker.com/settings/security>
+At <https://hub.docker.com/settings/security>:
 
 - Description: `MasterBackstageIdp`
 - Expiration: None
 - Access permissions: **Read & Write**
 
-## GitHub Secrets
+Copy the token — you'll add it as a GitHub secret in Step 3.
+
+### Step 3 — Add GitHub Secrets
 
 **Settings → Secrets and variables → Actions → New repository secret**
 
 | Secret | Value |
 |---|---|
 | `DOCKERHUB_USERNAME` | `christseng89` |
-| `DOCKERHUB_TOKEN` | _<your Docker Hub access token>_ |
+| `DOCKERHUB_TOKEN` | _your Docker Hub access token_ |
 | `ARGOCD_PASSWORD` | output of `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" \| base64 -d` |
 
-> The workflow reads these as `${{ secrets.DOCKERHUB_USERNAME }}`,
-> `${{ secrets.DOCKERHUB_TOKEN }}`, and `${{ secrets.ARGOCD_PASSWORD }}`. The
-> names **must** match exactly or `docker/login-action` / `argocd login` will
-> fail.
+> The workflow reads these exact names. Misnaming any of them will fail `docker/login-action` or `argocd login`.
 
-## Install ArgoCD CLI on the Runner Host
+### Step 4 — Install Actions Runner Controller (ARC)
 
-The `cd` job calls `argocd login` and `argocd app sync`, so the CLI must exist on the self-hosted runner machine.
+Reference: <https://github.com/actions/actions-runner-controller>
 
-```cmd
-choco install argocd-cli
-argocd version
-    argocd: v3.4.2+0dc6b1b
-    BuildDate: 2026-05-12T21:00:01Z
-    GitCommit: 0dc6b1b57dd5bb925d5b03c3d09419ab9fb4225e
-    GitTreeState: clean
-    GoVersion: go1.26.0
-    Compiler: gc
-    Platform: windows/amd64
-    {"level":"fatal","msg":"Argo CD server address unspecified","time":"2026-05-14T20:24:49+08:00"}
-```
-
-(The `fatal` line is expected when `argocd version` runs without a configured server — the workflow itself handles the login.)
-
-## Register the Self-Hosted Runner via Action Runner Controller 
-
-<https://github.com/actions/actions-runner-controller> => Quickstart Guide
+Install cert-manager (a hard dependency of ARC):
 
 ```bash
-# Install cert-manager
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.2/cert-manager.yaml
-kubectl get po -n cert-manager  
+kubectl get po -n cert-manager
+```
 
-# Deploy and Configure ARC
+Install the controller, providing a GitHub PAT with `repo` scope (you can reuse the one from Part 4):
+
+```bash
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
+helm repo update
 
-helm upgrade --install --namespace actions-runner-system --create-namespace\
-  --set=authSecret.create=true\
-  --set=authSecret.github_token="<YOUR_GITHUB_PAT>"\
-  --wait actions-runner-controller actions-runner-controller/actions-runner-controller
+helm upgrade --install \
+  --namespace actions-runner-system --create-namespace \
+  --set=authSecret.create=true \
+  --set=authSecret.github_token="<YOUR_GITHUB_PAT>" \
+  --wait \
+  actions-runner-controller actions-runner-controller/actions-runner-controller
+```
 
-# Create the GitHub self hosted runners via Kubernetes manifests
+Create the runner pool from the bundled manifest:
+
+```bash
 kubectl apply -f python-app/runnerdeployment.yaml
 kubectl get runners
 kubectl get po
-    NAME                               READY   STATUS    RESTARTS   AGE
-    example-runnerdeploy-p5j5h-cvr9x   2/2     Running   0          10m
 ```
+
+Expected output for the pods (the suffix will differ):
+
+```text
+NAME                               READY   STATUS    RESTARTS   AGE
+example-runnerdeploy-p5j5h-cvr9x   2/2     Running   0          10m
+```
+
+In GitHub → **Settings → Actions → Runners** the new runner should appear with status **Idle**, ready to accept jobs.
 
 ---
 
-# Part 6 — Verify the Pipeline
+## Part 6 — Verify the Pipeline End-to-End
 
-After everything above is in place, a code change in `python-app/src/**` should flow automatically to the cluster:
+With everything from Parts 1–5 in place, a single code edit should flow all the way to a redeployed pod.
 
 1. Edit `python-app/src/app.py` (e.g., change the `message` string) and push to `main`.
-2. Watch the workflow run: GitHub → **Actions → cicd**. CI builds & pushes `christseng89/python-app:<commit-6>`; CD updates `python-app/charts/python-app/values.yaml` and runs `argocd app sync python-app`.
-3. Confirm the new image tag landed in Git:
+2. Watch the workflow run at **GitHub → Actions → cicd**. You should see:
+   - **ci** build and push `christseng89/python-app:<commit-6>` as a multi-arch (`linux/amd64` + `linux/arm64`) image.
+   - **cd** bump `python-app/charts/python-app/values.yaml`, commit the change, then `argocd app sync python-app` and `argocd app wait --health`.
+3. Pull the bot's commit and confirm the new image tag:
 
-   ```cmd
+   ```bash
    git pull
    grep "tag:" python-app/charts/python-app/values.yaml
    ```
 
-4. Confirm the cluster rolled out the new pod:
+4. Confirm the cluster rolled out the new image:
 
-   ```cmd
-   kubectl get deploy python-app -n python-app -o jsonpath="{.spec.template.spec.containers[0].image}"
+   ```bash
+   kubectl get deploy python-app -n python-app \
+     -o jsonpath="{.spec.template.spec.containers[0].image}"
    kubectl get pods -n python-app
    ```
 
@@ -382,3 +498,93 @@ After everything above is in place, a code change in `python-app/src/**` should 
    ```cmd
    curl http://python-app.test.com:9080/api/v1/info
    ```
+
+---
+
+## Part 7 — Cleanup
+
+To completely tear down the local environment:
+
+```cmd
+:: Delete the ArgoCD-managed application (and its python-app namespace)
+helm uninstall argocd -n argocd
+kubectl delete ns argocd python-app
+
+:: Remove the ingress controller
+helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete ns ingress-nginx
+
+:: Remove ARC and cert-manager
+kubectl delete -f python-app/runnerdeployment.yaml
+helm uninstall actions-runner-controller -n actions-runner-system
+kubectl delete ns actions-runner-system
+kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+
+:: Drop the local hosts entries (PowerShell as Administrator)
+```
+
+```powershell
+$hosts = "C:\Windows\System32\drivers\etc\hosts"
+(Get-Content $hosts) |
+  Where-Object { $_ -notmatch "python-app\.test\.com|argocd\.test\.com" } |
+  Set-Content $hosts
+```
+
+---
+
+## Troubleshooting
+
+Problems that bit during development of this project, with their fixes.
+
+### `argocd app sync` succeeds but the pod still serves the old code
+
+**Cause:** ArgoCD's `Path` doesn't match where CI/CD writes `values.yaml`.
+
+**Fix:** In the ArgoCD application, ensure `Path = python-app/charts/python-app` exactly. The CD job rewrites `python-app/charts/python-app/values.yaml` — any other path means ArgoCD sees no diff.
+
+### Pod shows `CrashLoopBackOff` with `exec /usr/local/bin/python: exec format error`
+
+**Cause:** The container image's CPU architecture doesn't match the node. The GitHub-hosted CI runner is `linux/amd64`, but Surface Pro 11 / Apple Silicon nodes are `linux/arm64`.
+
+**Fix:** The workflow already builds multi-arch via `docker/setup-qemu-action@v3` and `platforms: linux/amd64,linux/arm64`. Confirm with:
+
+```cmd
+docker buildx imagetools inspect christseng89/python-app:<tag>
+```
+
+You should see two `Manifests:` entries, one per platform.
+
+### CD job fails with `argocd: command not found`
+
+**Cause:** ARC runner pods are minimal and don't ship the ArgoCD CLI.
+
+**Fix:** The workflow's `Install ArgoCD CLI` step now downloads the pinned binary into `/tmp/argocd`. Make sure that step exists before `Argocd app sync`.
+
+### `argocd login` fails with `WARNING: server is not configured with TLS. Proceed (y/n)?` and exits 20
+
+**Cause:** `argocd-server` is configured with `server.insecure: "true"`, so it serves plain HTTP. The CLI defaults to HTTPS and falls back to an interactive prompt that EOFs in a non-interactive shell.
+
+**Fix:** Add `--plaintext` (and drop `--insecure` / `--skip-test-tls` — those are HTTPS-only):
+
+```bash
+argocd login argocd-server.argocd.svc.cluster.local \
+  --plaintext --grpc-web \
+  --username admin --password "$ARGOCD_PASSWORD"
+```
+
+### `git status` reports `error: index uses ?<�d extension, which we do not understand` / `index file corrupt`
+
+**Cause:** Git index sometimes corrupts on Windows after interrupted operations.
+
+**Fix:** Rebuild it from `HEAD` (working-tree files are untouched):
+
+```cmd
+del .git\index
+git reset
+```
+
+### CD job's `yq` step fails on ARM64 runner
+
+**Cause:** Hardcoded `yq_linux_amd64` binary download.
+
+**Fix:** The workflow already detects the runner architecture and downloads the matching binary. Confirm the `Detect runner architecture` step runs before `Modify values file`.
