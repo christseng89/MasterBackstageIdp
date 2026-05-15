@@ -64,10 +64,10 @@ jobs:
       - name: Modify values file
         shell: bash
         run: |
-          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          chmod +x /usr/local/bin/yq
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /tmp/yq
+          chmod +x /tmp/yq
           cd python-app
-          yq -i '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
+          /tmp/yq -i '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
 
       - name: Commit changes
         uses: EndBug/add-and-commit@v9
