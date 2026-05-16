@@ -9,23 +9,27 @@ The result is a tight feedback loop where editing `python-app/src/app.py` and pu
 ## Architecture at a Glance
 
 ```text
-┌─────────────┐  push   ┌──────────────────┐  build   ┌─────────────┐
-│  Developer  │ ──────▶ │  GitHub (main)   │ ───────▶ │  Docker Hub │
-└─────────────┘         └──────────────────┘   image  └─────────────┘
-                              │                              │
-                              │ workflow:                     │ pull
-                              │  bumps image.tag              │
-                              ▼                              ▼
-                        ┌──────────────────┐  sync   ┌─────────────┐
-                        │ charts/.../values│ ──────▶ │   ArgoCD    │
-                        └──────────────────┘         └──────┬──────┘
-                                                            │ apply
-                                                            ▼
-                                                    ┌─────────────┐
-                                                    │ Kubernetes  │
-                                                    │ (python-app)│
-                                                    └─────────────┘
+┌─────────────┐ push  ┌──────────────────┐ build  ┌──────────────────────┐
+│  Developer  │ ────▶ │  GitHub (main)   │ ─────▶ │       Docker Hub     │
+└─────────────┘       └──────────────────┘ image  │ christseng89/        │
+                            │                     │  python-app:<sha>    │
+                            │ ci/cd workflow:     │  argocd-bin:v3.4.2   │
+                            │  bumps image.tag    │  yq-bin:v4.44.3      │
+                            │  in values.yaml     └──────────┬───────────┘
+                            ▼                                │ pull
+                      ┌──────────────────┐ sync   ┌──────────▼───────────┐
+                      │ charts/.../values│ ─────▶ │      ArgoCD          │
+                      └──────────────────┘        │  (in-cluster sync)   │
+                                                  └──────────┬───────────┘
+                                                             │ apply
+                                                             ▼
+                                                  ┌──────────────────────┐
+                                                  │     Kubernetes       │
+                                                  │     (python-app)     │
+                                                  └──────────────────────┘
 ```
+
+> The Docker Hub mirror tags (`argocd-bin`, `yq-bin`) exist so the CD job inside the cluster can pull CLI binaries quickly via Cloudflare's CDN instead of the slower GitHub Releases path. They're populated once per version by the `mirror-cli-binaries` workflow (Part 5, Step 5).
 
 ## Repository Layout
 
@@ -39,7 +43,8 @@ The result is a tight feedback loop where editing `python-app/src/app.py` and pu
 | `python-app/k8s/` | Raw Kubernetes manifests (alternative to Helm, for direct `kubectl apply`) |
 | `python-app/catalog-info.yaml` | Backstage catalog registration |
 | `python-app/runnerdeployment.yaml` | ARC self-hosted runner manifest |
-| `.github/workflows/cicd.yaml` | Authoritative GitHub Actions workflow |
+| `.github/workflows/cicd.yaml` | Authoritative CI/CD workflow (build + deploy on every push) |
+| `.github/workflows/mirror-cli-binaries.yaml` | One-shot mirror workflow — copies `argocd` + `yq` from GitHub Releases to Docker Hub for fast pulls from Asia |
 | `backstage/` | Backstage app (Git submodule) |
 | `charts/` | Backstage Helm chart fork (Git submodule, unrelated to python-app) |
 
@@ -359,42 +364,51 @@ curl http://python-app.test.com:9080/api/v1/healthz
 
 ## Part 5 — CI/CD Automation (GitHub Actions)
 
-The workflow at `.github/workflows/cicd.yaml` runs in two jobs on **self-hosted Linux runners** provisioned by [Actions Runner Controller (ARC)](https://github.com/actions/actions-runner-controller) inside this same Kubernetes cluster.
+Two workflow files cooperate:
+
+| File | Where it runs | When | Purpose |
+|---|---|---|---|
+| `.github/workflows/cicd.yaml` | **Self-hosted Linux runners (ARC) inside your cluster** | Every push to `python-app/src/**` (or manual `workflow_dispatch`) | Build multi-arch image → bump `values.yaml` → ArgoCD sync |
+| `.github/workflows/mirror-cli-binaries.yaml` | **GitHub-hosted `ubuntu-latest`** | Manual `workflow_dispatch`, once per `argocd` / `yq` version bump | Mirror CLI binaries from GitHub Releases to Docker Hub for fast Asia pull |
 
 ### How It Works
 
 ```text
 push to main (changes under python-app/src/**)
-        │
-        ▼
-┌──────────────────────────────┐
-│  ci  (runs-on: ARC linux)    │
-│   1. Checkout                │
-│   2. Set up QEMU + Buildx    │
-│   3. Login to Docker Hub     │
-│   4. Build & push multi-arch │
-│      christseng89/python-app │
-│      :<commit-6>             │
-└──────────────────────────────┘
-        │
-        ▼
-┌──────────────────────────────┐
-│  cd  (runs-on: ARC linux)    │
-│   1. Checkout                │
-│   2. Detect runner arch      │
-│   3. yq -i values.yaml       │
-│      (bump image.tag)        │
-│   4. git commit & push       │
-│   5. argocd login (in-cluster│
-│      service DNS)            │
-│   6. argocd app sync         │
-│   7. argocd app wait healthy │
-└──────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────┐
+│  ci   (runs-on: ARC linux)                   │
+│   1. Checkout                                │
+│   2. Set up QEMU + Buildx                    │
+│   3. Login to Docker Hub                     │
+│   4. Build & push multi-arch                 │
+│      christseng89/python-app:<commit-6>      │
+│      with registry-side build cache          │
+└──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────┐
+│  cd   (runs-on: ARC linux)                   │
+│   1. Checkout                                │
+│   2. Login to Docker Hub                     │
+│   3. Detect runner arch (amd64/arm64)        │
+│   4. Cache yq binary  → docker pull mirror   │
+│   5. yq -i values.yaml (bump image.tag)      │
+│   6. git commit & push (--rebase --autostash)│
+│   7. Cache argocd CLI → docker pull mirror   │
+│   8. argocd login (in-cluster service DNS,   │
+│      --plaintext --grpc-web --password-stdin)│
+│   9. argocd app sync python-app              │
+│  10. argocd app wait --health --timeout 180  │
+│  11. (on failure) Diagnose: argocd app get,  │
+│      kubectl describe, kubectl logs          │
+└──────────────────────────────────────────────┘
 ```
 
-> The `cd` job talks to ArgoCD via the in-cluster service DNS `argocd-server.argocd.svc.cluster.local`, **not** through `argocd.test.com:9080`. The ingress hostname only resolves on your laptop via the Windows hosts file, which ARC runner pods cannot see.
+The CD job talks to ArgoCD via the in-cluster service DNS `argocd-server.argocd.svc.cluster.local` — not through `argocd.test.com:9080`. The ingress hostname only resolves on your laptop via the Windows hosts file, which ARC runner pods cannot see.
 
-> 💡 **`argocd-cli` is not required on your local machine** to run this pipeline — the CD job downloads its own pinned `argocd` binary on every run. Install it locally only if you want to query ArgoCD by hand from a terminal.
+> 💡 **`argocd-cli` is not required on your local machine** to run this pipeline — the CD job pulls a pinned `argocd` binary from the Docker Hub mirror on every run (and caches it via `actions/cache`). Install the CLI locally only if you want to query ArgoCD by hand from your terminal.
 
 ### Step 1 — Repository Settings
 
@@ -404,13 +418,15 @@ In GitHub → repository **Settings**:
 - **Actions → General → Workflow permissions → Read and write permissions** ✅
   (required so the CD job's `EndBug/add-and-commit` action can push the updated `values.yaml` back to `main`)
 
+The workflow file itself also declares this explicitly via `permissions: contents: write`, but the repo-level setting must allow it.
+
 ### Step 2 — Create a Docker Hub Access Token
 
 At <https://hub.docker.com/settings/security>:
 
 - Description: `MasterBackstageIdp`
 - Expiration: None
-- Access permissions: **Read & Write**
+- Access permissions: **Read & Write** (write is needed because the mirror workflow pushes new image repos like `christseng89/argocd-bin`)
 
 Copy the token — you'll add it as a GitHub secret in Step 3.
 
@@ -418,13 +434,13 @@ Copy the token — you'll add it as a GitHub secret in Step 3.
 
 **Settings → Secrets and variables → Actions → New repository secret**
 
-| Secret | Value |
-|---|---|
-| `DOCKERHUB_USERNAME` | `christseng89` |
-| `DOCKERHUB_TOKEN` | _your Docker Hub access token_ |
-| `ARGOCD_PASSWORD` | output of `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" \| base64 -d` |
+| Secret | Value | Used by |
+|---|---|---|
+| `DOCKERHUB_USERNAME` | `christseng89` | `cicd.yaml` (CI + CD), `mirror-cli-binaries.yaml` |
+| `DOCKERHUB_TOKEN` | _your Docker Hub access token_ | `cicd.yaml` (CI + CD), `mirror-cli-binaries.yaml` |
+| `ARGOCD_PASSWORD` | output of `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" \| base64 -d` | `cicd.yaml` (CD only) |
 
-> The workflow reads these exact names. Misnaming any of them will fail `docker/login-action` or `argocd login`.
+> The workflows read these exact names. Misnaming any of them will fail `docker/login-action` or `argocd login`.
 
 ### Step 4 — Install Actions Runner Controller (ARC)
 
@@ -466,9 +482,35 @@ NAME                             READY   STATUS    RESTARTS   AGE
 self-hosted-runner-vbb92-mrcmr   2/2     Running   0          36m
 ```
 
-In GitHub → **Settings → Actions → Runners** the new runner should appear with status **Idle**, ready to accept jobs.
+In GitHub → **Settings → Actions → Runners** the new runner should appear:
 
+```text
 - self-hosted-runner-vbb92-mrcmr (self-hosted, linux) - Idle
+```
+
+### Step 5 — Bootstrap the CLI Binary Mirror (one-time)
+
+`argocd` and `yq` binaries on GitHub Releases can be very slow to download from Asia (50–100 KB/s for ARM64 in some cases). Without this step, the first CD run would spend an hour downloading 197 MB of `argocd` and probably hit the job timeout.
+
+The `mirror-cli-binaries` workflow runs on a GitHub-hosted `ubuntu-latest` runner (fast egress to both GitHub Releases and Docker Hub) and republishes those binaries as small `FROM scratch` Docker images. Your CD job then pulls from Docker Hub — Cloudflare CDN, fast in Asia.
+
+**Run it once now:**
+
+1. GitHub → **Actions → mirror-cli-binaries → Run workflow**
+2. Inputs:
+   - `argocd_version`: `v3.4.2` (matches `ARGOCD_VERSION` in `cicd.yaml`)
+   - `yq_version`: `v4.44.3` (matches `YQ_VERSION` in `cicd.yaml`)
+3. Click **Run workflow**
+
+Takes ~3–5 minutes. When it's green, verify on Docker Hub:
+
+- <https://hub.docker.com/r/christseng89/argocd-bin/tags>
+- <https://hub.docker.com/r/christseng89/yq-bin/tags>
+
+You should see your version tag with a multi-arch manifest (amd64 + arm64).
+
+> ⚠️ **Whenever you bump `ARGOCD_VERSION` or `YQ_VERSION` in `cicd.yaml`, run this mirror workflow first**. If you bump the version in `cicd.yaml` without re-mirroring, the CD job will fail with `manifest for christseng89/argocd-bin:vX.Y.Z not found`.
+
 ---
 
 ## Part 6 — Verify the Pipeline End-to-End
@@ -500,39 +542,64 @@ With everything from Parts 1–5 in place, a single code edit should flow all th
    curl http://python-app.test.com:9080/api/v1/info
    ```
 
-6. git config --global pull.rebase true
+6. The CD job's `EndBug/add-and-commit` step pushes the `values.yaml` bump back to `main`. Pull it locally so your next push isn't rejected as non-fast-forward:
+
+   ```bash
+   git config --global pull.rebase true   # one-time, makes future pulls clean
    git pull
+   ```
+
+   Or enable VS Code's **Git: Autofetch** setting and let the editor pull bot commits in the background.
 
 ---
 
-### Architecture
+## Appendix — Where Each Component Actually Runs
+
+Useful when troubleshooting "can X reach Y over the network?" questions.
+
+```text
 ┌──────────────────────────────────────────────────────────┐
 │ Layer 0: Windows Host (Surface Pro 11, ARM64)            │
 │          D:\development\MasterBackstageIdp\              │
 │          │                                                │
-│          │  Docker Desktop 的「檔案分享」                  │
+│          │  Docker Desktop file sharing                  │
 │          ▼                                                │
 │ ┌──────────────────────────────────────────────────────┐ │
 │ │ Layer 1: Docker Desktop VM (Linux on Hyper-V)        │ │
-│ │          /run/desktop/mnt/host/d/development/...      │ │
-│ │          (這層看得到 Windows 的 D:\,因為              │ │
-│ │           Docker Desktop 有做 9P / virtiofs mount)    │ │
-│ │          │                                            │ │
+│ │          /run/desktop/mnt/host/d/development/...     │ │
+│ │          (sees Windows D:\ via 9P / virtiofs mount)  │ │
+│ │          │                                           │ │
 │ │ ┌──────────────────────────────────────────────────┐ │ │
 │ │ │ Layer 2: Kubernetes cluster (docker-desktop)     │ │ │
-│ │ │          (Layer 1 上面跑 kubelet/CRI/CNI 構成的   │ │ │
-│ │ │           單節點 cluster)                         │ │ │
+│ │ │          single-node, kubelet + CRI + CNI on     │ │ │
+│ │ │          Layer 1                                 │ │ │
 │ │ │ ┌──────────────────────────────────────────────┐ │ │ │
 │ │ │ │ Layer 3: ARC Runner Pod (Linux container)    │ │ │ │
 │ │ │ │          /runner/_work/MasterBackstageIdp/   │ │ │ │
-│ │ │ │          (overlayfs,獨立於 Layer 1 的         │ │ │ │
-│ │ │ │           檔案系統,job 結束就被回收)          │ │ │ │
+│ │ │ │          overlayfs, isolated from Layer 1;   │ │ │ │
+│ │ │ │          discarded when the job ends.        │ │ │ │
 │ │ │ │                                              │ │ │ │
-│ │ │ │          ← cicd.yaml 的 step 跑在這          │ │ │ │
+│ │ │ │          ← `cicd.yaml` steps run here        │ │ │ │
 │ │ │ └──────────────────────────────────────────────┘ │ │ │
 │ │ └──────────────────────────────────────────────────┘ │ │
 │ └──────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘
+
+         ┌──────────────────────────────────────┐
+         │  GitHub-hosted runner (ubuntu-latest)│
+         │  ← `mirror-cli-binaries.yaml` runs   │
+         │     here. Fast egress to GitHub      │
+         │     Releases AND Docker Hub. No      │
+         │     visibility into your cluster.    │
+         └──────────────────────────────────────┘
+```
+
+Implications:
+
+- The `cd` job in `cicd.yaml` can reach `argocd-server.argocd.svc.cluster.local` because it shares Layer 2's CoreDNS — but it cannot see your Windows `D:\` files. That's why no GitHub Actions step can `git pull` to your laptop; the laptop must initiate the pull.
+- The `mirror-cli-binaries` workflow runs in GitHub's cloud, so it has no path to your in-cluster ArgoCD — but it has fast access to public services like GitHub Releases and Docker Hub. That's why we use it specifically for the binary-mirror role and nothing else.
+
+---
 
 ## Part 7 — Cleanup
 
@@ -620,4 +687,46 @@ git reset
 
 **Cause:** Hardcoded `yq_linux_amd64` binary download.
 
-**Fix:** The workflow already detects the runner architecture and downloads the matching binary. Confirm the `Detect runner architecture` step runs before `Modify values file`.
+**Fix:** The workflow already detects the runner architecture and pulls the matching arch from the Docker Hub mirror. Confirm the `Detect runner architecture` step runs before `Modify values file`.
+
+### `Install ArgoCD CLI` step takes 10+ minutes (or hits the job timeout)
+
+**Cause:** Direct download from GitHub Releases is slow from Asia (often 50–100 KB/s for the ~200 MB ARM64 binary), so the step blows past the CD job's `timeout-minutes: 25`. When the job times out, `actions/cache`'s post-step never runs, so the partial download is thrown away — every subsequent run starts from scratch (chicken-and-egg).
+
+**Fix:** Use the Docker Hub mirror (Part 5, Step 5). Run the `mirror-cli-binaries` workflow once on a GitHub-hosted runner (fast); after that, every CD job pulls the binary from Cloudflare CDN in seconds rather than from GitHub Releases in hours.
+
+### CD job fails with `manifest for christseng89/argocd-bin:vX.Y.Z not found`
+
+**Cause:** You bumped `ARGOCD_VERSION` in `cicd.yaml` but didn't re-run the mirror workflow for that new version.
+
+**Fix:** Order matters. Always:
+
+1. Run `mirror-cli-binaries` with the new version first (populates Docker Hub).
+2. Then bump `ARGOCD_VERSION` in `cicd.yaml` and push.
+
+Same rule applies for `YQ_VERSION`.
+
+### Local `git push` rejected with `non-fast-forward` after the bot already pushed
+
+**Cause:** The CD job's `EndBug/add-and-commit` pushed a `values.yaml` bump to `main` while you were editing locally.
+
+**Fix:** Pull first, then push:
+
+```bash
+git pull --rebase
+git push
+```
+
+Once-off setup so future pulls are clean and you don't accumulate merge commits:
+
+```bash
+git config --global pull.rebase true
+```
+
+Or enable VS Code's **Git: Autofetch** so the editor surfaces incoming commits in the Source Control panel within 60 seconds and you can pull with one click.
+
+### Diagnose-on-failure step shows `kubectl: command not found`
+
+**Cause:** Some ARC runner images don't bundle `kubectl`. The diagnostic step uses `|| true` so it doesn't fail the job, but it can't print pod details either.
+
+**Fix:** Either switch to a runner image that includes `kubectl` (e.g., `summerwind/actions-runner` does), or add an `apt-get install -y kubectl` step before the diagnose step. The `argocd app get` / `argocd app history` parts of the diagnostic still work without `kubectl`.
