@@ -56,10 +56,15 @@ jobs:
               "https://github.com/argoproj/argo-cd/releases/download/${{ inputs.argocd_version }}/argocd-linux-${arch}"
             chmod +x "argocd-${arch}"
           done
+          # CMD is required so consumers can `docker create` without supplying
+          # an arg. The binary itself doesn't run as a container (FROM scratch
+          # has no shell or libc to support a TTY), but setting CMD satisfies
+          # the docker daemon's "no command specified" check.
           cat > Dockerfile <<'EOF'
           FROM scratch
           ARG TARGETARCH
           COPY argocd-${TARGETARCH} /argocd
+          CMD ["/argocd"]
           EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
@@ -83,6 +88,7 @@ jobs:
           FROM scratch
           ARG TARGETARCH
           COPY yq-${TARGETARCH} /yq
+          CMD ["/yq"]
           EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \

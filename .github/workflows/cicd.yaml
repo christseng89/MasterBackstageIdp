@@ -128,8 +128,11 @@ jobs:
             echo "Cache miss — pulling yq ${{ env.YQ_VERSION }} from Docker Hub mirror…"
             time docker pull --platform "linux/${{ steps.arch.outputs.tag }}" \
               christseng89/yq-bin:${{ env.YQ_VERSION }}
+            # FROM scratch images have no default CMD, so docker create needs a
+            # dummy arg. It's never executed (we only use docker cp), so the
+            # value is irrelevant — using /yq just for self-documentation.
             cid=$(docker create --platform "linux/${{ steps.arch.outputs.tag }}" \
-              christseng89/yq-bin:${{ env.YQ_VERSION }})
+              christseng89/yq-bin:${{ env.YQ_VERSION }} /yq)
             docker cp "$cid:/yq" /tmp/yq
             docker rm "$cid" >/dev/null
             chmod +x /tmp/yq
@@ -164,8 +167,10 @@ jobs:
             echo "Cache miss — pulling argocd ${{ env.ARGOCD_VERSION }} from Docker Hub mirror…"
             time docker pull --platform "linux/${{ steps.arch.outputs.tag }}" \
               christseng89/argocd-bin:${{ env.ARGOCD_VERSION }}
+            # FROM scratch images have no default CMD — pass /argocd as a dummy
+            # arg. docker create just records the command, never runs it.
             cid=$(docker create --platform "linux/${{ steps.arch.outputs.tag }}" \
-              christseng89/argocd-bin:${{ env.ARGOCD_VERSION }})
+              christseng89/argocd-bin:${{ env.ARGOCD_VERSION }} /argocd)
             docker cp "$cid:/argocd" /tmp/argocd
             docker rm "$cid" >/dev/null
             chmod +x /tmp/argocd
