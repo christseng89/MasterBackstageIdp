@@ -675,6 +675,8 @@ argocd login argocd-server.argocd.svc.cluster.local \
   --username admin --password "$ARGOCD_PASSWORD"
 ```
 
+> Note: `argocd login` does **not** support `--password-stdin` (that flag exists only for `docker login`). The password must be passed via `--password <value>`. GitHub Actions masks the secret in logs, so the brief `ps`-visible exposure inside the runner pod is acceptable.
+
 ### `git status` reports `error: index uses ?<�d extension, which we do not understand` / `index file corrupt`
 
 **Cause:** Git index sometimes corrupts on Windows after interrupted operations.

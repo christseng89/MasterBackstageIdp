@@ -188,13 +188,14 @@ jobs:
           # service answers plain HTTP. Without this flag the CLI hits an
           # interactive "server is not configured with TLS. Proceed (y/n)?"
           # prompt and fatals with EOF (exit 20) in a non-interactive shell.
-          # --password-stdin: keep the password out of `ps` output during the
-          # ~50ms the argocd process is running.
-          echo "${{ secrets.ARGOCD_PASSWORD }}" | /tmp/argocd login ${{ env.ARGOCD_SERVER }} \
+          # Note: argocd login has no --password-stdin (that's docker login).
+          # The password is visible in `ps` for ~50ms during login — acceptable
+          # inside an isolated ARC pod, and GitHub masks the secret in logs.
+          /tmp/argocd login ${{ env.ARGOCD_SERVER }} \
             --plaintext \
             --grpc-web \
             --username admin \
-            --password-stdin
+            --password "${{ secrets.ARGOCD_PASSWORD }}"
           /tmp/argocd app sync ${{ env.ARGOCD_APP }}
           /tmp/argocd app wait ${{ env.ARGOCD_APP }} --health --timeout 180
 
