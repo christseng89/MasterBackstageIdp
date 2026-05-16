@@ -81,7 +81,10 @@ jobs:
   cd:
     needs: ci
     runs-on: [self-hosted, linux]
-    timeout-minutes: 10
+    # First successful run takes ~5–10 min just to download argocd CLI on a
+    # cold cache. Once actions/cache has saved the binary, subsequent runs
+    # drop back under 2 min — at that point you can safely lower this to 10.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,8 +112,15 @@ jobs:
         shell: bash
         run: |
           if [ ! -x /tmp/yq ]; then
-            curl -sL "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_${{ steps.arch.outputs.tag }}" -o /tmp/yq
+            echo "Cache miss — downloading yq ${{ env.YQ_VERSION }} (${{ steps.arch.outputs.tag }})…"
+            curl -fSL \
+              --retry 5 --retry-delay 5 --retry-connrefused \
+              --connect-timeout 30 --max-time 300 \
+              -o /tmp/yq \
+              "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_${{ steps.arch.outputs.tag }}"
             chmod +x /tmp/yq
+          else
+            echo "Cache hit — using cached yq at /tmp/yq"
           fi
           /tmp/yq -i '.image.tag = "${{ needs.ci.outputs.commit_id }}"' ${{ env.VALUES_PATH }}
 
@@ -137,8 +147,18 @@ jobs:
         shell: bash
         run: |
           if [ ! -x /tmp/argocd ]; then
-            curl -sSL -o /tmp/argocd "https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-${{ steps.arch.outputs.tag }}"
+            echo "Cache miss — downloading argocd ${{ env.ARGOCD_VERSION }} (${{ steps.arch.outputs.tag }})…"
+            time curl -fSL \
+              --retry 5 \
+              --retry-delay 5 \
+              --retry-connrefused \
+              --connect-timeout 30 \
+              --max-time 900 \
+              -o /tmp/argocd \
+              "https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-${{ steps.arch.outputs.tag }}"
             chmod +x /tmp/argocd
+          else
+            echo "Cache hit — using cached argocd at /tmp/argocd"
           fi
           /tmp/argocd version --client
 
