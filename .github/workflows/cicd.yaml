@@ -6,17 +6,35 @@ on:
       - python-app/src/**
     branches:
       - main
+  # Re-run the pipeline manually without needing a code change.
+  # Useful for redeploying the same source after a cluster issue.
+  workflow_dispatch:
+
+# Serialize runs against the same branch so two close pushes can't race on
+# values.yaml. cancel-in-progress is intentionally false — once CD started,
+# we want it to finish syncing rather than be killed mid-flight.
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+# Least-privilege: only contents:write is needed (for the CD job's commit/push
+# back to main). Newer GitHub repos default GITHUB_TOKEN to read-only, so this
+# block is now required, not optional.
+permissions:
+  contents: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # Pin CLI versions used by the CD job so reproducibility doesn't depend on
-  # whatever happens to be tagged `latest` on the upstream release.
   ARGOCD_VERSION: v3.4.2
   YQ_VERSION: v4.44.3
+  IMAGE_NAME: christseng89/python-app
+  VALUES_PATH: python-app/charts/python-app/values.yaml
+  ARGOCD_APP: python-app
+  ARGOCD_SERVER: argocd-server.argocd.svc.cluster.local
 
 jobs:
   ci:
     runs-on: [self-hosted, linux]
+    timeout-minutes: 15
     outputs:
       commit_id: ${{ env.COMMIT_ID }}
 
@@ -26,13 +44,15 @@ jobs:
 
       - name: Shorten commit id
         shell: bash
-        # COMMIT_ID = the shortened 6-character version, derived from GITHUB_SHA (the full 40-character git commit hash)
-        # BRANCH_NAME = could be used to identify staging such as "staging" or "production" such as "main"
+        # COMMIT_ID = first 6 chars of GITHUB_SHA, used as the Docker image tag
+        # and as the value written into the Helm chart's values.yaml.
         run: |
           echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
 
-      # Required so the amd64 GitHub runner can build an arm64 layer for
-      # Surface Pro 11 / Apple Silicon developers via cross-architecture emulation.
+      # QEMU + Buildx are required so the runner can emit an arm64 image layer
+      # on top of an amd64 host (or vice versa) via cross-architecture emulation.
+      # Without this, ARM64 nodes (Surface Pro 11, Apple Silicon) crash the pod
+      # with "exec format error".
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -51,17 +71,19 @@ jobs:
           context: python-app
           push: true
           provenance: false
-          # Multi-arch: amd64 for cloud / Intel dev boxes, arm64 for Apple Silicon
-          # and Snapdragon X (Surface Pro 11). Without this the image is amd64-only
-          # and ARM64 nodes crash with "exec format error".
           platforms: linux/amd64,linux/arm64
-          tags: christseng89/python-app:${{ env.COMMIT_ID }}
+          tags: ${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}
+          # Reuse Docker layers across builds via a separate buildcache tag on
+          # the same Docker Hub repo. Saves ~60–120s on multi-arch builds.
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
 
   cd:
     needs: ci
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -80,18 +102,21 @@ jobs:
         run: |
           curl -sL "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_${{ steps.arch.outputs.tag }}" -o /tmp/yq
           chmod +x /tmp/yq
-          cd python-app
-          /tmp/yq -i '.image.tag = "${{needs.ci.outputs.commit_id}}"' charts/python-app/values.yaml
+          /tmp/yq -i '.image.tag = "${{ needs.ci.outputs.commit_id }}"' ${{ env.VALUES_PATH }}
 
       - name: Commit changes
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Updates values.yaml with commit ${{needs.ci.outputs.commit_id}}"
+          message: "Updates values.yaml with commit ${{ needs.ci.outputs.commit_id }}"
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Rebase onto remote before pushing — survives the case where a
+          # parallel run already pushed (concurrency: cancel-in-progress=false
+          # serializes, but a manual edit on main can still slip in).
+          pull: '--rebase --autostash'
+          push: true
 
-      # ARC runner pods don't have the argocd CLI pre-installed, so fetch it.
-      # The in-cluster service DNS is used because argocd.test.com only resolves
-      # via the Windows hosts file, which the runner pod can't see.
+      # ARC runner pods don't have the argocd CLI pre-installed, so fetch it
+      # at the pinned version every run.
       - name: Install ArgoCD CLI
         shell: bash
         run: |
@@ -102,15 +127,36 @@ jobs:
       - name: Argocd app sync
         shell: bash
         run: |
-          # --plaintext: argocd-server has `server.insecure: true`, so it answers
-          # in plain HTTP. Without this flag the CLI hits an interactive
-          # "server is not configured with TLS. Proceed (y/n)?" prompt and
-          # fatals with EOF (exit code 20) in a non-interactive shell.
-          # Default port with --plaintext is 80, which matches the service.
-          /tmp/argocd login argocd-server.argocd.svc.cluster.local \
+          # In-cluster service DNS is used because argocd.test.com only resolves
+          # via the Windows hosts file, which the runner pod can't see.
+          # --plaintext: argocd-server has `server.insecure: true`, so the
+          # service answers plain HTTP. Without this flag the CLI hits an
+          # interactive "server is not configured with TLS. Proceed (y/n)?"
+          # prompt and fatals with EOF (exit 20) in a non-interactive shell.
+          # --password-stdin: keep the password out of `ps` output during the
+          # ~50ms the argocd process is running.
+          echo "${{ secrets.ARGOCD_PASSWORD }}" | /tmp/argocd login ${{ env.ARGOCD_SERVER }} \
             --plaintext \
             --grpc-web \
             --username admin \
-            --password "${{ secrets.ARGOCD_PASSWORD }}"
-          /tmp/argocd app sync python-app
-          /tmp/argocd app wait python-app --health --timeout 180
+            --password-stdin
+          /tmp/argocd app sync ${{ env.ARGOCD_APP }}
+          /tmp/argocd app wait ${{ env.ARGOCD_APP }} --health --timeout 180
+
+      # Runs only when one of the steps above failed. Gives a one-page dump of
+      # what's wrong with the app so you don't have to manually kubectl/argocd
+      # into the cluster after a red CD.
+      - name: Diagnose on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== argocd app get ==="
+          /tmp/argocd app get ${{ env.ARGOCD_APP }} || true
+          echo "=== argocd app history ==="
+          /tmp/argocd app history ${{ env.ARGOCD_APP }} --output wide || true
+          echo "=== pods in ${{ env.ARGOCD_APP }} ns ==="
+          kubectl get pods -n ${{ env.ARGOCD_APP }} -o wide || true
+          echo "=== deploy describe ==="
+          kubectl describe deploy ${{ env.ARGOCD_APP }} -n ${{ env.ARGOCD_APP }} || true
+          echo "=== recent pod logs ==="
+          kubectl logs -n ${{ env.ARGOCD_APP }} -l app.kubernetes.io/name=${{ env.ARGOCD_APP }} --tail=200 --all-containers || true
