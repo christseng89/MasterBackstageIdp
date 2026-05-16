@@ -95,13 +95,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Needed so docker pull from the mirror images authenticates if the
-      # mirror repos are private. Harmless if they're public.
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # No `docker login` here: the mirror images (christseng89/argocd-bin,
+      # christseng89/yq-bin) are public on Docker Hub, so anonymous pulls work.
+      # Skipping login also dodges flaky timeouts to auth.docker.io from this
+      # in-cluster ARC pod (which `docker pull` from production.cloudflare.docker.com
+      # doesn't suffer from). If you ever flip the mirror repos to private, add
+      # the docker/login-action@v3 step back here.
 
       - name: Detect runner architecture
         id: arch
@@ -124,15 +123,22 @@ jobs:
       - name: Modify values file
         shell: bash
         run: |
+          set -euo pipefail
+          IMG="christseng89/yq-bin:${{ env.YQ_VERSION }}"
+          PLATFORM="linux/${{ steps.arch.outputs.tag }}"
+
           if [ ! -x /tmp/yq ]; then
             echo "Cache miss — pulling yq ${{ env.YQ_VERSION }} from Docker Hub mirror…"
-            time docker pull --platform "linux/${{ steps.arch.outputs.tag }}" \
-              christseng89/yq-bin:${{ env.YQ_VERSION }}
+            # Retry up to 3× with backoff in case of intermittent network blips
+            for i in 1 2 3; do
+              if time docker pull --platform "$PLATFORM" "$IMG"; then break; fi
+              echo "Attempt $i failed; retrying in ${i}0s…"
+              sleep "${i}0"
+            done
             # FROM scratch images have no default CMD, so docker create needs a
             # dummy arg. It's never executed (we only use docker cp), so the
-            # value is irrelevant — using /yq just for self-documentation.
-            cid=$(docker create --platform "linux/${{ steps.arch.outputs.tag }}" \
-              christseng89/yq-bin:${{ env.YQ_VERSION }} /yq)
+            # value is irrelevant — /yq is just self-documenting.
+            cid=$(docker create --platform "$PLATFORM" "$IMG" /yq)
             docker cp "$cid:/yq" /tmp/yq
             docker rm "$cid" >/dev/null
             chmod +x /tmp/yq
@@ -163,14 +169,20 @@ jobs:
       - name: Install ArgoCD CLI
         shell: bash
         run: |
+          set -euo pipefail
+          IMG="christseng89/argocd-bin:${{ env.ARGOCD_VERSION }}"
+          PLATFORM="linux/${{ steps.arch.outputs.tag }}"
+
           if [ ! -x /tmp/argocd ]; then
             echo "Cache miss — pulling argocd ${{ env.ARGOCD_VERSION }} from Docker Hub mirror…"
-            time docker pull --platform "linux/${{ steps.arch.outputs.tag }}" \
-              christseng89/argocd-bin:${{ env.ARGOCD_VERSION }}
+            for i in 1 2 3; do
+              if time docker pull --platform "$PLATFORM" "$IMG"; then break; fi
+              echo "Attempt $i failed; retrying in ${i}0s…"
+              sleep "${i}0"
+            done
             # FROM scratch images have no default CMD — pass /argocd as a dummy
             # arg. docker create just records the command, never runs it.
-            cid=$(docker create --platform "linux/${{ steps.arch.outputs.tag }}" \
-              christseng89/argocd-bin:${{ env.ARGOCD_VERSION }} /argocd)
+            cid=$(docker create --platform "$PLATFORM" "$IMG" /argocd)
             docker cp "$cid:/argocd" /tmp/argocd
             docker rm "$cid" >/dev/null
             chmod +x /tmp/argocd
