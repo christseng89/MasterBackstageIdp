@@ -97,11 +97,21 @@ jobs:
             *) echo "Unsupported arch $(uname -m)"; exit 1 ;;
           esac
 
+      # Cache yq across runs. Key includes version + arch so a version bump
+      # automatically invalidates the cache and re-downloads.
+      - name: Cache yq binary
+        uses: actions/cache@v4
+        with:
+          path: /tmp/yq
+          key: yq-${{ steps.arch.outputs.tag }}-${{ env.YQ_VERSION }}
+
       - name: Modify values file
         shell: bash
         run: |
-          curl -sL "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_${{ steps.arch.outputs.tag }}" -o /tmp/yq
-          chmod +x /tmp/yq
+          if [ ! -x /tmp/yq ]; then
+            curl -sL "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_${{ steps.arch.outputs.tag }}" -o /tmp/yq
+            chmod +x /tmp/yq
+          fi
           /tmp/yq -i '.image.tag = "${{ needs.ci.outputs.commit_id }}"' ${{ env.VALUES_PATH }}
 
       - name: Commit changes
@@ -115,13 +125,21 @@ jobs:
           pull: '--rebase --autostash'
           push: true
 
-      # ARC runner pods don't have the argocd CLI pre-installed, so fetch it
-      # at the pinned version every run.
+      # Cache argocd CLI across runs. v3.x is ~150 MB — without this the step
+      # takes 30–60s on every CD; cached restore is <1s.
+      - name: Cache argocd CLI
+        uses: actions/cache@v4
+        with:
+          path: /tmp/argocd
+          key: argocd-${{ steps.arch.outputs.tag }}-${{ env.ARGOCD_VERSION }}
+
       - name: Install ArgoCD CLI
         shell: bash
         run: |
-          curl -sSL -o /tmp/argocd "https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-${{ steps.arch.outputs.tag }}"
-          chmod +x /tmp/argocd
+          if [ ! -x /tmp/argocd ]; then
+            curl -sSL -o /tmp/argocd "https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-${{ steps.arch.outputs.tag }}"
+            chmod +x /tmp/argocd
+          fi
           /tmp/argocd version --client
 
       - name: Argocd app sync
