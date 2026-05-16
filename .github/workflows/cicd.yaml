@@ -33,7 +33,12 @@ env:
 
 jobs:
   ci:
-    runs-on: [self-hosted, linux]
+    # GitHub-hosted runner: CI doesn't need cluster access (only Docker Hub egress)
+    # and GitHub-hosted runners have very fast access to GitHub Releases (internal
+    # network), so docker/setup-buildx-action and docker/setup-qemu-action download
+    # in seconds rather than minutes. Keep CD on ARC because it needs to reach
+    # argocd-server.argocd.svc.cluster.local in-cluster.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       commit_id: ${{ env.COMMIT_ID }}

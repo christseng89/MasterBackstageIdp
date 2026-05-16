@@ -364,12 +364,15 @@ curl http://python-app.test.com:9080/api/v1/healthz
 
 ## Part 5 — CI/CD Automation (GitHub Actions)
 
-Two workflow files cooperate:
+Two workflow files cooperate, with each job placed on the runner type that matches its needs:
 
-| File | Where it runs | When | Purpose |
+| File / Job | Where it runs | When | Why this runner |
 |---|---|---|---|
-| `.github/workflows/cicd.yaml` | **Self-hosted Linux runners (ARC) inside your cluster** | Every push to `python-app/src/**` (or manual `workflow_dispatch`) | Build multi-arch image → bump `values.yaml` → ArgoCD sync |
-| `.github/workflows/mirror-cli-binaries.yaml` | **GitHub-hosted `ubuntu-latest`** | Manual `workflow_dispatch`, once per `argocd` / `yq` version bump | Mirror CLI binaries from GitHub Releases to Docker Hub for fast Asia pull |
+| `cicd.yaml` → `ci` job | **GitHub-hosted `ubuntu-latest`** | Every push to `python-app/src/**` (or manual `workflow_dispatch`) | IO-heavy: needs fast access to GitHub Releases (for buildx/QEMU) and Docker Hub. Doesn't need cluster access. |
+| `cicd.yaml` → `cd` job | **Self-hosted Linux runners (ARC) inside your cluster** | After `ci` succeeds | Must reach `argocd-server.argocd.svc.cluster.local` via in-cluster DNS — only ARC pods can. |
+| `mirror-cli-binaries.yaml` | **GitHub-hosted `ubuntu-latest`** | Manual `workflow_dispatch`, once per `argocd` / `yq` version bump | Pure IO: download GitHub Releases → push Docker Hub. Both are public services; cluster access not needed. |
+
+> 💡 **Don't move the `ci` job to ARC** — every tool installer (`docker/setup-buildx-action`, `docker/setup-qemu-action`, `actions/cache`) downloads from GitHub Releases / GitHub cache service. From an ARC pod in Asia these can run at 0.1 MB/s and trip the job timeout. Keep `ci` on `ubuntu-latest` and only `cd` on ARC.
 
 ### How It Works
 
