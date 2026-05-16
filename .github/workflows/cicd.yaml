@@ -90,6 +90,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Needed so docker pull from the mirror images authenticates if the
+      # mirror repos are private. Harmless if they're public.
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Detect runner architecture
         id: arch
         shell: bash
@@ -112,12 +120,13 @@ jobs:
         shell: bash
         run: |
           if [ ! -x /tmp/yq ]; then
-            echo "Cache miss — downloading yq ${{ env.YQ_VERSION }} (${{ steps.arch.outputs.tag }})…"
-            curl -fSL \
-              --retry 5 --retry-delay 5 --retry-connrefused \
-              --connect-timeout 30 --max-time 300 \
-              -o /tmp/yq \
-              "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_${{ steps.arch.outputs.tag }}"
+            echo "Cache miss — pulling yq ${{ env.YQ_VERSION }} from Docker Hub mirror…"
+            time docker pull --platform "linux/${{ steps.arch.outputs.tag }}" \
+              christseng89/yq-bin:${{ env.YQ_VERSION }}
+            cid=$(docker create --platform "linux/${{ steps.arch.outputs.tag }}" \
+              christseng89/yq-bin:${{ env.YQ_VERSION }})
+            docker cp "$cid:/yq" /tmp/yq
+            docker rm "$cid" >/dev/null
             chmod +x /tmp/yq
           else
             echo "Cache hit — using cached yq at /tmp/yq"
@@ -147,15 +156,13 @@ jobs:
         shell: bash
         run: |
           if [ ! -x /tmp/argocd ]; then
-            echo "Cache miss — downloading argocd ${{ env.ARGOCD_VERSION }} (${{ steps.arch.outputs.tag }})…"
-            time curl -fSL \
-              --retry 5 \
-              --retry-delay 5 \
-              --retry-connrefused \
-              --connect-timeout 30 \
-              --max-time 900 \
-              -o /tmp/argocd \
-              "https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-${{ steps.arch.outputs.tag }}"
+            echo "Cache miss — pulling argocd ${{ env.ARGOCD_VERSION }} from Docker Hub mirror…"
+            time docker pull --platform "linux/${{ steps.arch.outputs.tag }}" \
+              christseng89/argocd-bin:${{ env.ARGOCD_VERSION }}
+            cid=$(docker create --platform "linux/${{ steps.arch.outputs.tag }}" \
+              christseng89/argocd-bin:${{ env.ARGOCD_VERSION }})
+            docker cp "$cid:/argocd" /tmp/argocd
+            docker rm "$cid" >/dev/null
             chmod +x /tmp/argocd
           else
             echo "Cache hit — using cached argocd at /tmp/argocd"
