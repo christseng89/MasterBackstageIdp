@@ -574,9 +574,9 @@ Useful when troubleshooting "can X reach Y over the network?" questions.
 ┌──────────────────────────────────────────────────────────┐
 │ Layer 0: Windows Host (Surface Pro 11, ARM64)            │
 │          D:\development\MasterBackstageIdp\              │
-│          │                                                │
+│          │                                               │
 │          │  Docker Desktop file sharing                  │
-│          ▼                                                │
+│          ▼                                               │
 │ ┌──────────────────────────────────────────────────────┐ │
 │ │ Layer 1: Docker Desktop VM (Linux on Hyper-V)        │ │
 │ │          /run/desktop/mnt/host/d/development/...     │ │
