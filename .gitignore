@@ -71,3 +71,6 @@ python-app/charts/*/*.tgz
 !python-app/README.md
 
 actions-runner/
+node_modules/
+# backstage-app/
+backstage-app/
