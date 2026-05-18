@@ -210,7 +210,7 @@ backend.add(import('@backstage/plugin-search-backend-module-pg'));
 You can run `yarn start` here to smoke-test the backend before continuing, or
 skip ahead and start once everything is wired up.
 
-### 5. Backstage frontend — sign-in page with multiple providers
+### 5. Backstage frontend — sign-in page with GitHub SSO
 
 **Inside container (same session or new `docker run`):**
 
@@ -219,9 +219,15 @@ cd backstage
 nano packages/app/src/App.tsx
 ```
 
-Replace `packages/app/src/App.tsx` with the version below. This wires both the
-Guest and GitHub sign-in providers into the new frontend system (`createApp`
-from `@backstage/frontend-defaults`).
+Replace `packages/app/src/App.tsx` with the version below. This wires
+**GitHub as the sole SSO provider** into the new frontend system (`createApp`
+from `@backstage/frontend-defaults`). Note the singular `provider={{ ... }}`
+prop — using one object instead of the `providers={[ ... ]}` array hides the
+Guest card and forces every visitor through GitHub OAuth.
+
+> 💡 If you want the Guest card back for quick local dev (no real auth), swap
+> `provider={{ ... }}` for `providers={['guest', { id: 'github-auth-provider', ... }]}`
+> and the SignInPage will render both cards again.
 
 ```tsx
 import { createApp } from '@backstage/frontend-defaults';
@@ -345,16 +351,25 @@ You should see Rspack compile both `backend` and `app`, with messages similar to
 ```
 
 Open `http://localhost:3000` in a browser on the host. You should see the
-**SignInPage** with two cards:
+**SignInPage** with a single card:
 
-1. **Guest** — anonymous mode, useful for quick testing
-2. **GitHub** — click *Sign In*, GitHub OAuth consent screen appears, approve,
-   then you land in Backstage authenticated as `christseng89`
+- **GitHub** — header reads "GitHub", body reads "Sign in using GitHub", and a
+  `SIGN IN` button. Click it → GitHub OAuth consent screen appears → approve →
+  you land in Backstage authenticated as `christseng89`.
 
-> The deprecation / `findDOMNode` / `<h5><h2>` warnings in the browser DevTools
-> Console all originate from Backstage's own packages (`core-components`,
-> `plugin-catalog`) and `@material-ui/core` v4. They are harmless and will
-> disappear after Backstage finishes its MUI v5 migration.
+There is **no Guest card** because `App.tsx` uses the singular
+`provider={{ ... }}` prop. This is closer to a production-ready setup: every
+visitor must authenticate via GitHub.
+
+> The `findDOMNode`, missing `key` prop, and `<h5><h2>` warnings in the browser
+> DevTools Console all originate from Backstage's own packages
+> (`core-components`, `plugin-catalog`) and `@material-ui/core` v4. They are
+> harmless and will disappear after Backstage finishes its MUI v5 migration.
+> To hide them, paste this filter into the Console filter box:
+>
+> ```text
+> -findDOMNode -"unique \"key\" prop" -validateDOMNesting -DEPRECATION
+> ```
 
 ---
 
@@ -379,11 +394,6 @@ auto-discover updates.
 
 ---
 
-### Test Backstage Catalog registration via GitHub Actions
-<http://localhost:3000>
-
--findDOMNode -"unique \"key\" prop" -validateDOMNesting -DEPRECATION
-
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
@@ -394,6 +404,8 @@ auto-discover updates.
 | Backend boot crash on `plugin-search-backend-module-pg` | PG search module loaded with no PG | Remove that `backend.add(...)` line (see Step 4) |
 | Console: unresolved relation `group:team-a` | `memberOf: [team-a]` references missing Group | Either define a `team-a` Group entity or remove `memberOf` |
 | `engine "node" is incompatible` warnings | Node 24 newer than Backstage's tested set | Switch base image to `node:22-bookworm-slim` |
+| Sign-in page only shows GitHub, want Guest back | `App.tsx` uses singular `provider={{ ... }}` | Swap to `providers={['guest', { id: 'github-auth-provider', title: 'GitHub', message: 'Sign in using GitHub', apiRef: githubAuthApiRef }]}` in `packages/app/src/App.tsx` |
+| `Entity context is not available` at `/kubernetes` | Kubernetes plugin route is entity-scoped, opened without an entity | Navigate via `/catalog → python-app → Kubernetes tab` (URL ends with `/component/python-app/kubernetes`) |
 
 ---
 
