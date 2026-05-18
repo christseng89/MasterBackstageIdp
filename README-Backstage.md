@@ -167,3 +167,46 @@ export default createApp({
   ],
 });
 ```
+
+### Backstage Resolvers - Continued
+
+<https://backstage.io/docs/auth/github/provider#configuration>
+<D:\development\MasterBackstageIdp\backstage\packages\catalog-model\examples\acme\team-a-group.yaml>
+
+```bash
+mkdir catalog/entities -p
+nano catalog/entities/users.yaml
+echo $PWD/catalog/entities/users.yaml
+
+nano app-config.local.yaml
+```
+
+```yaml users.yaml
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: christseng89
+spec:
+  profile:
+    displayName: Christ Tseng
+    email: samfire5200@gmail.com
+    picture: https://api.dicebear.com/7.x/avataaars/svg?seed=Leo&backgroundColor=transparent
+  memberOf: [team-a]
+```
+
+```yaml app-config.local.yaml 
+catalog:
+  rules:
+    - allow: [User, Component, System, API, Resource, Location]
+  locations:
+    # Local example data, file locations are relative to the backend process, typically `packages/backend`
+    - type: file
+      target: /app/backstage/catalog/entities/users.yaml
+      # echo $PWD/catalog/entities/users.yaml
+```
+
+### Backstage Test Authentication - Continued
+
+```bash
+    yarn start
+```

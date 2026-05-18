@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn --version)",
+      "PowerShell(yarn *)",
+      "PowerShell(node --version)",
+      "PowerShell(node \"D:\\\\development\\\\MasterBackstageIdp\\\\backstage-app\\\\backstage\\\\.yarn\\\\releases\\\\yarn-4.4.1.cjs\" --version)"
+    ]
+  }
+}
