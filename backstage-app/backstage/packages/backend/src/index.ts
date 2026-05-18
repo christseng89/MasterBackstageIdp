@@ -51,7 +51,8 @@ backend.add(import('@backstage/plugin-search-backend'));
 
 // search engine
 // See https://backstage.io/docs/features/search/search-engines
-backend.add(import('@backstage/plugin-search-backend-module-pg'));
+// No engine module = plugin-search-backend uses its built-in in-memory (Lunr) engine.
+// For production add @backstage/plugin-search-backend-module-pg or -elasticsearch.
 
 // search collators
 backend.add(import('@backstage/plugin-search-backend-module-catalog'));
