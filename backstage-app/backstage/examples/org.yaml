@@ -7,11 +7,29 @@ metadata:
 spec:
   memberOf: [guests]
 ---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: christseng89
+spec:
+  profile:
+    displayName: Christ Tseng
+    email: samfire5200@gmail.com
+  memberOf: [team-a]
+---
 # https://backstage.io/docs/features/software-catalog/descriptor-format#kind-group
 apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
   name: guests
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: team-a
 spec:
   type: team
   children: []

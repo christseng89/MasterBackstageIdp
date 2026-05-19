@@ -78,6 +78,69 @@ exit
 
 ---
 
+## Running Backstage Locally (Without Docker)
+
+The Backstage app can be run directly on the host machine (Node 22 or 24, Yarn 4.4.1) without Docker.
+
+### Prerequisites
+
+- Node 22 or 24 (required by Backstage CLI)
+- Yarn 4.4.1 (`packageManager` field in root `package.json`)
+
+### 1. Install dependencies
+
+```bash
+cd backstage-app/backstage
+yarn install
+```
+
+### 2. Create `.env` in the backstage directory
+
+```env
+GITHUB_TOKEN=<your-github-pat>
+AUTH_GITHUB_CLIENT_ID=<your-oauth-client-id>
+AUTH_GITHUB_CLIENT_SECRET=<your-oauth-client-secret>
+```
+
+The file is `.gitignore`d by default.
+
+### 3. Load env vars and start
+
+**Git Bash:**
+
+```bash
+set -o allexport && source .env && set +o allexport
+echo $AUTH_GITHUB_CLIENT_ID    # verify — must not be empty
+yarn start
+```
+
+**CMD:**
+
+```cmd
+for /f "usebackq tokens=*" %i in (.env) do set %i
+yarn start
+```
+
+**PowerShell:**
+
+```powershell
+Get-Content .env | ForEach-Object {
+    if ($_ -match '^([^#][^=]+)=(.*)$') {
+        [System.Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim())
+    }
+}
+yarn start
+```
+
+> The env vars are scoped to the current shell session. Open a fresh terminal and repeat the load step each time.
+
+### 4. Open the app
+
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:7007`
+
+---
+
 ## Setup Authentication: Backstage + GitHub
 
 ### References
@@ -99,11 +162,13 @@ GitHub → Settings → Developer Settings → OAuth Apps → New OAuth App
 
 ### 2. Save credentials to a host-side `.env`
 
-Create `D:\development\MasterBackstageIdp\.env` (NOT inside the container):
+Create `D:\development\MasterBackstageIdp\backstage-app\backstage\.env` (NOT inside the container):
 
 ```env
-AUTH_GITHUB_CLIENT_ID=<your-client-id>
-AUTH_GITHUB_CLIENT_SECRET=<your-client-secret>
+GITHUB_TOKEN=<your-github-pat>
+AUTH_GITHUB_CLIENT_ID=<your-oauth-client-id>
+AUTH_GITHUB_CLIENT_SECRET=<your-oauth-client-secret>
+ARGOCD_PASSWORD=<argocd-admin-password>   # optional, only needed for CD pipeline
 ```
 
 > ⚠️ Add `.env` to `.gitignore` to keep secrets out of the repo.
@@ -163,6 +228,7 @@ auth:
         signIn:
           resolvers:
             # See https://backstage.io/docs/auth/github/provider#resolvers
+            - resolver: emailMatchingUserEntityProfileEmail
             - resolver: usernameMatchingUserEntityName
 ```
 
@@ -264,9 +330,10 @@ export default createApp({
 Reference: <https://backstage.io/docs/auth/github/provider#configuration>
 Example file: `backstage/packages/catalog-model/examples/acme/team-a-group.yaml`
 
-The `usernameMatchingUserEntityName` resolver requires a User entity whose
-`metadata.name` exactly matches the GitHub login. Without it, sign-in succeeds
-but resolution fails and you'll see a 401 from `/api/auth/...`.
+The sign-in resolvers require a User entity whose `metadata.name` exactly matches
+the GitHub login and whose `spec.profile.email` matches the GitHub account email.
+Without it, sign-in succeeds but resolution fails and you'll see a 401 from
+`/api/auth/...`.
 
 **Inside container, from `/app/backstage`:**
 
@@ -299,14 +366,46 @@ spec:
   # memberOf: [team-a]
 ```
 
-Update `app-config.local.yaml` to add the catalog section (complete final file):
+> **Local development (non-Docker) note:** The absolute path
+> `/app/backstage/catalog/entities/users.yaml` only exists inside the Docker
+> container. For local dev, the reliable approach is to add the User (and Group)
+> entity directly to `examples/org.yaml`, which is loaded unconditionally by
+> `app-config.yaml` with an explicit `allow: [User, Group]` per-location rule.
+> Append these blocks to `examples/org.yaml`:
+>
+> ```yaml
+> ---
+> apiVersion: backstage.io/v1alpha1
+> kind: User
+> metadata:
+>   name: christseng89        # must match GitHub login exactly
+> spec:
+>   profile:
+>     displayName: Christ Tseng
+>     email: samfire5200@gmail.com
+>   memberOf: [team-a]
+> ---
+> apiVersion: backstage.io/v1alpha1
+> kind: Group
+> metadata:
+>   name: team-a
+> spec:
+>   type: team
+>   children: []
+> ```
+>
+> Also, for local dev the `catalog` section should be **removed** from
+> `app-config.local.yaml` — its `locations` array can shadow or conflict with
+> the base config's locations.
+
+**Complete `app-config.local.yaml` — Docker (container) version:**
 
 ```bash
 nano app-config.local.yaml
 ```
 
 ```yaml
-# app-config.local.yaml — complete file
+# app-config.local.yaml — Docker / container version
 app:
   listen:
     host: 0.0.0.0
@@ -324,6 +423,8 @@ auth:
         clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
         signIn:
           resolvers:
+            # See https://backstage.io/docs/auth/github/provider#resolvers for more resolvers
+            - resolver: emailMatchingUserEntityProfileEmail
             - resolver: usernameMatchingUserEntityName
 
 catalog:
@@ -334,6 +435,81 @@ catalog:
     - type: file
       target: /app/backstage/catalog/entities/users.yaml
 ```
+
+**Complete `app-config.local.yaml` — Local dev (host machine) version:**
+
+For local development the `catalog` section is omitted entirely. The user entity is
+added directly to `examples/org.yaml` (loaded unconditionally by `app-config.yaml`),
+so no extra catalog location is needed.
+
+```yaml
+# app-config.local.yaml — local dev version
+app:
+  listen:
+    host: 0.0.0.0
+
+backend:
+  listen:
+    host: 0.0.0.0
+
+auth:
+  environment: development
+  providers:
+    github:
+      development:
+        clientId: ${AUTH_GITHUB_CLIENT_ID}
+        clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
+        signIn:
+          resolvers:
+            # See https://backstage.io/docs/auth/github/provider#resolvers for more resolvers
+            - resolver: emailMatchingUserEntityProfileEmail
+            - resolver: usernameMatchingUserEntityName
+```
+
+**Complete `examples/org.yaml` — local dev (with real user added):**
+
+```yaml
+---
+# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-user
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: guest
+spec:
+  memberOf: [guests]
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: christseng89        # MUST match your GitHub login exactly
+spec:
+  profile:
+    displayName: Christ Tseng
+    email: samfire5200@gmail.com  # MUST match primary email on your GitHub account
+  memberOf: [team-a]
+---
+# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-group
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: guests
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: team-a
+spec:
+  type: team
+  children: []
+```
+
+> `examples/org.yaml` is referenced in `app-config.yaml` with an explicit
+> `allow: [User, Group]` per-location rule, so entities added here are always
+> ingested regardless of the global catalog rules. This is the most reliable
+> location for user entities in local development.
 
 ### 7. Start Backstage and verify sign-in
 
@@ -395,6 +571,7 @@ auto-discover updates.
 
 ## Restart Backstage
 ```bash
+cd backstage-app
 source .env
 docker run --rm -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID -e AUTH_GITHUB_CLIENT_SECRET=$AUTH_GITHUB_CLIENT_SECRET -p 3000:3000 -ti -p 7007:7007 -v //d/development/MasterBackstageIdp/backstage-app://app -w //app node:24-bookworm-slim bash
 
@@ -404,6 +581,40 @@ docker run --rm -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID -e AUTH_GITHUB_C
     exit
 
 ```
+
+## Dependency Maintenance
+
+Run `yarn explain peer-requirements` from the backstage directory to audit peer dependency gaps. Most warnings are internal Backstage package gaps and are harmless; a few are actionable:
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `yarn explain peer-requirements` shows ✘ for `@testing-library/react` | `packages/app` pinned to v14 but `@backstage/frontend-test-utils` requires v16 | Set `"@testing-library/react": "^16.0.0"` and `"@testing-library/dom": "^10.0.0"` in `packages/app/package.json`, then `yarn install` |
+| `yarn explain peer-requirements` shows ✘ for `@types/react` | `packages/app` pinned to `^19` but `react` runtime is v18 | Set `"@types/react": "^18"` in `packages/app/package.json` to match the runtime version |
+| Remaining ~45 ✘ peer warnings | Internal Backstage package gaps and optional module-federation peers | Expected — these don't affect runtime; no action needed |
+
+### Corrected `packages/app/package.json` devDependencies
+
+The scaffold generates incorrect versions for several devDependencies. Apply these corrections, then run `yarn install`:
+
+```json
+"devDependencies": {
+  "@backstage/frontend-test-utils": "^0.5.2",
+  "@playwright/test": "^1.32.3",
+  "@testing-library/dom": "^10.0.0",
+  "@testing-library/jest-dom": "^6.0.0",
+  "@testing-library/react": "^16.0.0",
+  "@testing-library/user-event": "^14.0.0",
+  "@types/react": "^18",
+  "@types/react-dom": "*",
+  "cross-env": "^7.0.0",
+  "jest": "^30.4.2"
+}
+```
+
+Key changes from the scaffold defaults:
+- `@testing-library/dom`: `^9` → `^10` (`@testing-library/react` v16 requires dom v10+)
+- `@testing-library/react`: `^14` → `^16` (required by `@backstage/frontend-test-utils@^0.5.2`)
+- `@types/react`: `^19` → `^18` (must match the `react@^18` runtime; `^19` causes type/peer conflicts)
 
 ## Troubleshooting
 
@@ -417,6 +628,9 @@ docker run --rm -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID -e AUTH_GITHUB_C
 | `engine "node" is incompatible` warnings | Node 24 newer than Backstage's tested set | Switch base image to `node:22-bookworm-slim` |
 | Sign-in page only shows GitHub, want Guest back | `App.tsx` uses singular `provider={{ ... }}` | Swap to `providers={['guest', { id: 'github-auth-provider', title: 'GitHub', message: 'Sign in using GitHub', apiRef: githubAuthApiRef }]}` in `packages/app/src/App.tsx` |
 | `Entity context is not available` at `/kubernetes` | Kubernetes plugin route is entity-scoped, opened without an entity | Navigate via `/catalog → python-app → Kubernetes tab` (URL ends with `/component/python-app/kubernetes`) |
+| "unable to resolve user identity" after GitHub OAuth | User entity not in catalog OR GitHub username/email doesn't match catalog entity | Add user to `examples/org.yaml` (always loaded) with matching `metadata.name` and `spec.profile.email`; use both `emailMatchingUserEntityProfileEmail` and `usernameMatchingUserEntityName` resolvers |
+| `catalog/entities/users.yaml` not loaded in local dev | Absolute path `/app/backstage/...` only works inside Docker container | For local dev, add user entity to `examples/org.yaml` instead; remove `catalog` section from `app-config.local.yaml` |
+| Auth env vars empty when `yarn start` is run | `.env` not sourced before starting | Run `set -o allexport && source .env && set +o allexport` in Git Bash before `yarn start` |
 
 ---
 
