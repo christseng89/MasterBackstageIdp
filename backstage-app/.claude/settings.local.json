@@ -4,7 +4,10 @@
       "Bash(yarn --version)",
       "PowerShell(yarn *)",
       "PowerShell(node --version)",
-      "PowerShell(node \"D:\\\\development\\\\MasterBackstageIdp\\\\backstage-app\\\\backstage\\\\.yarn\\\\releases\\\\yarn-4.4.1.cjs\" --version)"
+      "PowerShell(node \"D:\\\\development\\\\MasterBackstageIdp\\\\backstage-app\\\\backstage\\\\.yarn\\\\releases\\\\yarn-4.4.1.cjs\" --version)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(ls \"$env:USERPROFILE\\\\.claude\\\\plugins\" -Recurse | Select-Object FullName)",
+      "PowerShell(ls \"$env:USERPROFILE\\\\.claude\\\\plugins\\\\data\" -Recurse | Select-Object FullName -First 30)"
     ]
   }
 }

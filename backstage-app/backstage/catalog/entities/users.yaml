@@ -1,11 +1,11 @@
-apiVersion: backstage.io/v1alpha1
-kind: Group
-metadata:
-  name: team-a
-spec:
-  type: team
-  children: []
----
+# apiVersion: backstage.io/v1alpha1
+# kind: Group
+# metadata:
+#   name: team-a
+# spec:
+#   type: team
+#   children: []
+# ---
 apiVersion: backstage.io/v1alpha1
 kind: User
 metadata:
@@ -15,4 +15,4 @@ spec:
     displayName: Christ Tseng
     email: samfire5200@gmail.com
     picture: https://api.dicebear.com/7.x/avataaars/svg?seed=Leo&backgroundColor=transparent
-  memberOf: [team-a]
+  memberOf: [development]

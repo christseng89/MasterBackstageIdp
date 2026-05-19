@@ -21,3 +21,12 @@ auth:
             # See https://backstage.io/docs/auth/github/provider#resolvers for more resolvers
             - resolver: emailMatchingUserEntityProfileEmail
             - resolver: usernameMatchingUserEntityName
+catalog:
+  rules:
+    - allow: [User, Group]
+  locations:
+    # Absolute path inside the container (/app = volume mount root on host)
+    - type: file
+      target: /app/backstage/catalog/entities/users.yaml
+    - type: file
+      target: /app/backstage/catalog/entities/groups.yaml

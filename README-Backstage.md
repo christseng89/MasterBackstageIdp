@@ -328,7 +328,7 @@ export default createApp({
 ### 6. Catalog: register the User entity for sign-in resolver
 
 Reference: <https://backstage.io/docs/auth/github/provider#configuration>
-Example file: `backstage/packages/catalog-model/examples/acme/team-a-group.yaml`
+Example file: `https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/acme/team-a-group.yaml`
 
 The sign-in resolvers require a User entity whose `metadata.name` exactly matches
 the GitHub login and whose `spec.profile.email` matches the GitHub account email.
