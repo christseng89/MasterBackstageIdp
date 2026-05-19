@@ -1,11 +1,11 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: MasterBackstageIdp
+  name: python-app
+  description: Python app that displays time.
   annotations:
     github.com/project-slug: christseng89/MasterBackstageIdp
 spec:
   type: service
   owner: development
   lifecycle: experimental
-
