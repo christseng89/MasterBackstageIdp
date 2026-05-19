@@ -59,13 +59,24 @@ nano app-config.local.yaml
 ...
 catalog:
   rules:
-    - allow: [User, Group]
+    - allow: [Component, System, API, Resource, Location]
+
   locations:
     # Absolute path inside the container (/app = volume mount root on host)
     - type: file
       target: /app/backstage/catalog/entities/users.yaml
+      rules:
+        - allow: [User]
     - type: file
       target: /app/backstage/catalog/entities/groups.yaml
+      rules:
+        - allow: [Group]
+
+  backend:
+    reading:
+      allow:
+        - host: raw.githubusercontent.com
+
 ```
 
 ## Python App Catalog Descriptor
