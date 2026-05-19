@@ -45,6 +45,7 @@ apt-get update && apt-get install -y curl nano
 # Always edit app-config.local.yaml (it overrides app-config.yaml and is .gitignored
 # by default). Never edit app-config.yaml directly — it's the committed baseline.
 nano app-config.local.yaml
+yarn explain peer-requirements
 ```
 
 ```yaml
@@ -111,25 +112,15 @@ AUTH_GITHUB_CLIENT_SECRET=<your-client-secret>
 
 **On host (PowerShell) — load `.env` and start the container:**
 
-```powershell
+```bash
+source .env
 # Robust .env loader: skips blank lines and # comments, strips surrounding quotes
-Get-Content .env | Where-Object { $_ -match '^\s*[^#\s]' } | ForEach-Object {
-    $k, $v = $_ -split '=', 2
-    if ($k -and $v) {
-        $v = $v.Trim().Trim('"').Trim("'")
-        [System.Environment]::SetEnvironmentVariable($k.Trim(), $v)
-    }
-}
 
-echo $env:AUTH_GITHUB_CLIENT_ID
-echo $env:AUTH_GITHUB_CLIENT_SECRET
+echo $AUTH_GITHUB_CLIENT_ID
+echo $AUTH_GITHUB_CLIENT_SECRET
 
-docker run --rm `
-  -e AUTH_GITHUB_CLIENT_ID=$env:AUTH_GITHUB_CLIENT_ID `
-  -e AUTH_GITHUB_CLIENT_SECRET=$env:AUTH_GITHUB_CLIENT_SECRET `
-  -p 3000:3000 -p 7007:7007 -ti `
-  -v //d/development/MasterBackstageIdp/backstage-app://app `
-  -w //app node:24-bookworm-slim bash
+docker run --rm -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID -e AUTH_GITHUB_CLIENT_SECRET=$AUTH_GITHUB_CLIENT_SECRET -p 3000:3000 -ti -p 7007:7007 -v //d/development/MasterBackstageIdp/backstage-app://app -w //app node:24-bookworm-slim bash
+
 ```
 
 **Inside container — verify env vars were passed through:**
@@ -287,6 +278,14 @@ nano catalog/entities/users.yaml
 ```yaml
 # catalog/entities/users.yaml
 apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: team-a
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
 kind: User
 metadata:
   name: christseng89          # MUST match your GitHub login exactly
@@ -393,6 +392,18 @@ at the GitHub raw URL of `python-app/catalog-info.yaml` so Backstage can
 auto-discover updates.
 
 ---
+
+## Restart Backstage
+```bash
+source .env
+docker run --rm -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID -e AUTH_GITHUB_CLIENT_SECRET=$AUTH_GITHUB_CLIENT_SECRET -p 3000:3000 -ti -p 7007:7007 -v //d/development/MasterBackstageIdp/backstage-app://app -w //app node:24-bookworm-slim bash
+
+    cd backstage
+    yarn start
+        local: http://localhost:3000
+    exit
+
+```
 
 ## Troubleshooting
 

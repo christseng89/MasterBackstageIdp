@@ -72,4 +72,5 @@ python-app/charts/*/*.tgz
 
 actions-runner/
 node_modules/
+node_modulesx/
 # backstage-app/

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"D:\\\\development\\\\MasterBackstageIdp\\\\backstage-app\\\\backstage\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(yarn config *)",
+      "Bash(Remove-Item -Recurse -Force \"D:\\\\development\\\\MasterBackstageIdp\\\\backstage-app\\\\backstage\\\\node_modules\" -ErrorAction SilentlyContinue)",
+      "Bash(Write-Host \"node_modules removed\")",
+      "Bash(yarn install *)",
+      "Bash(yarn explain *)",
+      "Bash(Select-String '✘')",
+      "Bash(Measure-Object -Line)",
+      "PowerShell(yarn explain *)",
+      "Bash(Test-Path *)"
+    ]
+  }
+}
