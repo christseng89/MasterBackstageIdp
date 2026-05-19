@@ -72,11 +72,6 @@ catalog:
       rules:
         - allow: [Group]
 
-  backend:
-    reading:
-      allow:
-        - host: raw.githubusercontent.com
-
 ```
 
 ## Python App Catalog Descriptor
