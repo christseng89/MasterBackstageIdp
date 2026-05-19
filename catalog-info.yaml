@@ -5,6 +5,7 @@ metadata:
   annotations:
     github.com/project-slug: christseng89/MasterBackstageIdp
 spec:
-  type: other
-  lifecycle: unknown
+  type: service
   owner: development
+  lifecycle: experimental
+
