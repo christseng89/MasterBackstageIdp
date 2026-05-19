@@ -99,3 +99,4 @@ git push origin main
 
 ## Registering the Python App in Backstage Catalog
 
+https://github.com/christseng89/MasterBackstageIdp/catalog-info.yaml
