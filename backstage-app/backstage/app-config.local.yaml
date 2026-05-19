@@ -35,3 +35,8 @@ catalog:
       target: /app/backstage/catalog/entities/groups.yaml
       rules:
         - allow: [Group]
+
+integrations:
+  github:
+    - host: github.com
+      token: ${GITHUB_TOKEN}
