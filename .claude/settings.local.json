@@ -17,7 +17,8 @@
       "WebFetch(domain:docs.github.com)",
       "Bash(git -C \"d:\\\\development\\\\MasterBackstageIdp\" submodule status)",
       "Bash(git pull *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(Remove-Item *)"
     ]
   }
 }

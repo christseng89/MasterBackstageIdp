@@ -115,5 +115,5 @@ docker run --rm -e GITHUB_TOKEN=$GITHUB_TOKEN -e AUTH_GITHUB_CLIENT_ID=$AUTH_GIT
 ### 2. Verify Python App in Backstage Catalog
 - Open Backstage in your browser (http://localhost:3000).
 -> Catalog -> CREATE -> REGISTER EXISTING COMPONENT
-* URL: https://github.com/christseng89/MasterBackstageIdp/blob/main/python-app/catalog-info.yaml
+* URL: https://github.com/christseng89/MasterBackstageIdp/blob/master/python-app/catalog-info.yaml
 -> ANALYZE -> IMPORT -> VIEW COMPONENT 
