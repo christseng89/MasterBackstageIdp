@@ -99,4 +99,21 @@ git push origin main
 
 ## Registering the Python App in Backstage Catalog
 
-https://github.com/christseng89/MasterBackstageIdp/catalog-info.yaml
+### 1. Restart Backstage
+```bash
+cd backstage-app
+source .env
+docker run --rm -e GITHUB_TOKEN=$GITHUB_TOKEN -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID -e AUTH_GITHUB_CLIENT_SECRET=$AUTH_GITHUB_CLIENT_SECRET -p 3000:3000 -ti -p 7007:7007 -v //d/development/MasterBackstageIdp/backstage-app://app -w //app node:24-bookworm-slim bash
+
+    cd backstage
+    yarn start
+        local: http://localhost:3000
+    exit
+
+```
+
+### 2. Verify Python App in Backstage Catalog
+- Open Backstage in your browser (http://localhost:3000).
+-> Catalog -> CREATE -> REGISTER EXISTING COMPONENT
+* URL: https://github.com/christseng89/MasterBackstageIdp/blob/main/python-app/catalog-info.yaml
+-> ANALYZE -> IMPORT -> VIEW COMPONENT 
