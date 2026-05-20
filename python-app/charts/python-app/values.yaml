@@ -1,3 +1,5 @@
+commonLabels:
+  backstage.io/kubernetes-id: python-app
 replicaCount: 1
 image:
   repository: christseng89/python-app
