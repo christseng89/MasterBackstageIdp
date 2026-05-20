@@ -30,7 +30,6 @@ curl http://python-app.test.com:9080/
 curl http://python-app.test.com:9080/api/v1/info
 curl http://python-app.test.com:9080/api/v1/healthz
 ```
-```
 
 ## Documents for python-app
 
@@ -39,16 +38,15 @@ python-app/mkdocs.yml
 ```yaml
 site_name: "python-app"
 site_description: "Main documentation for the python-app"
-repo_url: https://github.com/christseng89/python-app
+repo_url: https://github.com/christseng89/MasterBackstageIdp
 edit_uri: edit/main/python-app/docs
 
 plugins:
   - techdocs-core
+
 # For sidebar navigation on https://backstage.io/, see `microsite/sidebars.json`
 nav:
   - Home: index.md
-  - API Reference:
-      - Endpoints: index.m
 
 ```
 
@@ -91,4 +89,11 @@ docker run --rm \
         local: http://localhost:3000
     exit
 
+```
 
+```cmd
+cd D:\development\MasterBackstageIdp\python-app
+pip install mkdocs mkdocs-techdocs-core
+mkdocs serve
+    local: http://127.0.0.1:8000/
+```
