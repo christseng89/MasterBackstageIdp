@@ -115,5 +115,80 @@ docker run --rm -e GITHUB_TOKEN=$GITHUB_TOKEN -e AUTH_GITHUB_CLIENT_ID=$AUTH_GIT
 ### 2. Verify Python App in Backstage Catalog
 - Open Backstage in your browser (http://localhost:3000).
 -> Catalog -> CREATE -> REGISTER EXISTING COMPONENT
-* URL: https://github.com/christseng89/MasterBackstageIdp/blob/master/python-app/catalog-info.yaml
+* URL: https://github.com/christseng89/MasterBackstageIdp/blob/main/python-app/catalog-info.yaml
 -> ANALYZE -> IMPORT -> VIEW COMPONENT 
+
+## Work with Kubernetes in Backstage
+
+```bash
+kubectl create sa backstage -n kube-system 
+kubectl create clusterrolebinding backstage-view --clusterrole=view --serviceaccount=kube-system:backstage
+kubectl -n kube-system create token backstage --duration=8760h
+```
+
+```bash .env
+notepad .env 
+  ...
+  K8S_SA_TOKEN=eyJhbGciOi...
+```
+
+```tsx packages/app/src/modules/nav/Sidebar.tsx
+      // Skipped items
+      nav.take('page:search'); // Using search modal instead
+      nav.take('page:kubernetes'); // 獨立 K8s 頁面不支援 — 只能當作實體分頁使用
+      
+```
+
+```yaml python-app/catalog-info.yaml
+metadata:
+  name: python-app
+  annotations:
+    github.com/project-slug: christseng89/MasterBackstageIdp
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-id: python-app
+    backstage.io/kubernetes-namespace: python-app
+...
+```
+
+```yaml app-config.local.yaml
+kubernetes:
+  serviceLocatorMethod:
+    type: 'multiTenant'
+  clusterLocatorMethods:
+    - type: 'config'
+      clusters:
+        - name: docker-desktop
+          url: https://host.docker.internal:6443
+          authProvider: serviceAccount
+          skipTLSVerify: true        # API cert is self-signed and not for host.docker.internal
+          serviceAccountToken: ${K8S_SA_TOKEN}
+  customResources:
+    - group: 'argoproj.io'           # to see ArgoCD Application for python-app
+      apiVersion: 'v1alpha1'
+      plural: 'applications'
+
+```
+
+```bash
+source .env
+echo $K8S_SA_TOKEN
+
+docker run --rm \
+  -e GITHUB_TOKEN=$GITHUB_TOKEN \
+  -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID \
+  -e AUTH_GITHUB_CLIENT_SECRET=$AUTH_GITHUB_CLIENT_SECRET \
+  -e K8S_SA_TOKEN=$K8S_SA_TOKEN \
+  --add-host=host.docker.internal:host-gateway \
+  -p 3000:3000 -ti -p 7007:7007 \
+  -v //d/development/MasterBackstageIdp/backstage-app://app \
+  -w //app node:24-bookworm-slim bash
+
+  apt-get update && apt-get install -y curl jq
+  curl -sk -H "Authorization: Bearer $K8S_SA_TOKEN" \
+    https://host.docker.internal:6443/api/v1/namespaces/python-app/pods | jq '.items[].metadata.name'
+      #"python-app-55989d4d55-mslrc"
+    cd backstage
+    yarn start
+        local: http://localhost:3000
+    exit
+``` 

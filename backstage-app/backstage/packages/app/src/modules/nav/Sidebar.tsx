@@ -23,7 +23,8 @@ export const SidebarContent = NavContentBlueprint.make({
 
       // Skipped items
       nav.take('page:search'); // Using search modal instead
-
+      nav.take('page:kubernetes'); // 獨立 K8s 頁面不支援 — 只能當作實體分頁使用
+      
       return (
         <Sidebar>
           <SidebarLogo />

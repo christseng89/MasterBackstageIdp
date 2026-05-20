@@ -2,12 +2,12 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: python-app
-  description: Python app that displays time.
   annotations:
     github.com/project-slug: christseng89/MasterBackstageIdp
-  # annotations:
-  #   github.com/project-slug: christseng89/MasterBackstageIdp
-  #   backstage.io/techdocs-ref: dir:.
+    backstage.io/techdocs-ref: dir:.
+    backstage.io/kubernetes-id: python-app
+    backstage.io/kubernetes-namespace: python-app
+
 spec:
   type: service
   owner: development

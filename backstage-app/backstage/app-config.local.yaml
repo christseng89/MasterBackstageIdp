@@ -40,3 +40,19 @@ integrations:
   github:
     - host: github.com
       token: ${GITHUB_TOKEN}
+
+kubernetes:
+  serviceLocatorMethod:
+    type: "multiTenant"
+  clusterLocatorMethods:
+    - type: "config"
+      clusters:
+        - name: docker-desktop
+          url: https://host.docker.internal:6443
+          authProvider: serviceAccount
+          skipTLSVerify: true # API cert is self-signed and not for host.docker.internal
+          serviceAccountToken: ${K8S_SA_TOKEN}
+  customResources:
+    - group: "argoproj.io" # to see ArgoCD Application for python-app
+      apiVersion: "v1alpha1"
+      plural: "applications"
