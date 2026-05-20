@@ -192,3 +192,38 @@ docker run --rm \
         local: http://localhost:3000
     exit
 ``` 
+
+## Verify Kubernetes Integration in Backstage
+
+python-app\charts\python-app\templates\_helpers.tpl
+```yaml
+...
+{{/*
+Common labels
+*/}}
+{{- define "python-app.labels" -}}
+helm.sh/chart: {{ include "python-app.chart" . }}
+{{ include "python-app.selectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{ toYaml . }}
+{{- end }}
+{{- end }}
+...
+```
+
+python-app\charts\python-app\values.yaml
+```yaml
+commonLabels:
+  backstage.io/kubernetes-id: python-app
+...
+```
+
+```bash
+kubectl apply -f python-app/runnerdeployment.yaml
+kubectl get runners
+kubectl get po
+```
