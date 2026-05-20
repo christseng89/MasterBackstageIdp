@@ -234,3 +234,110 @@ http://argocd.test.com:9080/ => Sync python-app
 ```bash
 kubectl get all,ingress -n python-app -l backstage.io/kubernetes-id=python-app
 ```
+
+### Python App API Endpoint in Backstage
+http://python-app.test.com:9080/
+http://python-app.test.com:9080/api/v1/info
+http://python-app.test.com:9080/api/v1/healthz
+
+## Python App with API in Catalog
+
+```yaml catalog-info.yaml
+...
+  links:
+    - url: http://python-app.test.com:9080/
+      title: Hello World
+      icon: web
+    - url: http://python-app.test.com:9080/api/v1/info
+      title: Service Info
+      icon: dashboard
+    - url: http://python-app.test.com:9080/api/v1/healthz
+      title: Health Check
+      icon: techdocs
+spec:
+  type: service
+  owner: development
+  lifecycle: experimental
+  providesApis:
+    - python-app-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: python-app-api
+  description: REST API exposed by python-app — greeting, info, and health endpoints.
+  tags:
+    - rest
+    - python
+    - flask
+  links:
+    - url: http://python-app.test.com:9080/api/v1/info
+      title: Live /info endpoint
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: development
+  definition:
+    $text: ./openapi.yaml
+
+```
+
+python-app\openapi.yaml
+```yaml
+openapi: 3.0.3
+info:
+  title: python-app API
+  description: Flask service that returns a greeting, current time/hostname, and a health check.
+  version: 1.0.0
+servers:
+  - url: http://python-app.test.com:9080
+    description: Local Docker Desktop via nginx ingress (port 9080)
+paths:
+  /:
+    get:
+      summary: Hello World
+      description: Returns a simple greeting.
+      responses:
+        "200":
+          description: Greeting
+          content:
+            text/html:
+              schema:
+                type: string
+                example: Hello World!
+  /api/v1/info:
+    get:
+      summary: Service info
+      description: Returns current time, hostname, and a message.
+      responses:
+        "200":
+          description: Service info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  time: { type: string, format: date-time }
+                  hostname: { type: string }
+                  message: { type: string }
+                example:
+                  time: "2026-05-20T10:30:00Z"
+                  hostname: python-app-57c7f8c859-tcsdx
+                  message: Hello from python-app
+  /api/v1/healthz:
+    get:
+      summary: Liveness / readiness probe
+      description: Returns 200 OK if the service is healthy.
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                example:
+                  status: ok
+
+```

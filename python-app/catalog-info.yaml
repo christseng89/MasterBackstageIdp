@@ -2,13 +2,44 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: python-app
+  description: Python app that displays time.
   annotations:
     github.com/project-slug: christseng89/MasterBackstageIdp
     backstage.io/techdocs-ref: dir:.
     backstage.io/kubernetes-id: python-app
     backstage.io/kubernetes-namespace: python-app
-
+  links:
+    - url: http://python-app.test.com:9080/
+      title: Hello World
+      icon: web
+    - url: http://python-app.test.com:9080/api/v1/info
+      title: Service Info
+      icon: dashboard
+    - url: http://python-app.test.com:9080/api/v1/healthz
+      title: Health Check
+      icon: techdocs
 spec:
   type: service
   owner: development
   lifecycle: experimental
+  providesApis:
+    - python-app-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: python-app-api
+  description: REST API exposed by python-app — greeting, info, and health endpoints.
+  tags:
+    - rest
+    - python
+    - flask
+  links:
+    - url: http://python-app.test.com:9080/api/v1/info
+      title: Live /info endpoint
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: development
+  definition:
+    $text: ./openapi.yaml
