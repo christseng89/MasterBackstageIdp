@@ -1,11 +1,21 @@
-# Documents for python-app
+# python-app
 
-This application has two endpoints:
-- `/api/v1/info`
-- `/api/v1/healthz`
+A Flask service that returns a greeting, current time/hostname, and a health check.
 
-Here you could expand on what each of these endpoints do.
+## Endpoints
 
-# How to access the app?
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | Returns a `Hello World!` greeting |
+| GET | `/api/v1/info` | Returns current time, hostname, and a message |
+| GET | `/api/v1/healthz` | Liveness/readiness probe |
 
-You can access the app by accessing this URL: `python-app.test.com/api/v1/healthz` 
+## How to access the app
+
+The service is exposed via the nginx ingress controller running on Docker Desktop.
+
+```bash
+curl http://python-app.test.com:9080/
+curl http://python-app.test.com:9080/api/v1/info
+curl http://python-app.test.com:9080/api/v1/healthz
+```

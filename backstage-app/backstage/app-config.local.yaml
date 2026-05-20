@@ -56,3 +56,10 @@ kubernetes:
     - group: "argoproj.io" # to see ArgoCD Application for python-app
       apiVersion: "v1alpha1"
       plural: "applications"
+
+techdocs:
+  builder: "local"
+  generator:
+    runIn: "local" # ← was 'docker' in app-config.yaml; override here
+  publisher:
+    type: "local"
