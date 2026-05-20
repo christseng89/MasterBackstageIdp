@@ -170,6 +170,7 @@ kubernetes:
 ```
 
 ```bash
+cd backstage-app
 source .env
 echo $K8S_SA_TOKEN
 
@@ -226,4 +227,10 @@ commonLabels:
 kubectl apply -f python-app/runnerdeployment.yaml
 kubectl get runners
 kubectl get po
+```
+
+http://argocd.test.com:9080/ => Sync python-app
+
+```bash
+kubectl get all,ingress -n python-app -l backstage.io/kubernetes-id=python-app
 ```
