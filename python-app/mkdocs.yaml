@@ -9,3 +9,4 @@ plugins:
 # For sidebar navigation on https://backstage.io/, see `microsite/sidebars.json`
 nav:
   - Home: index.md
+  - Test: test.md

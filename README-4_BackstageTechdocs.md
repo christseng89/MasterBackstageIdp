@@ -40,6 +40,12 @@ metadata:
 
 ## 2. Author the docs source
 
+### Using mkdocs: standalone vs baked into image
+
+<https://www.mkdocs.org/getting-started/>
+
+### Create markdown files in `python-app/docs/` and a `mkdocs.yaml` config.
+
 `python-app/docs/index.md`
 
 ````md
@@ -68,6 +74,8 @@ curl http://python-app.test.com:9080/api/v1/healthz
 
 ## 3. Configure MkDocs
 
+<https://github.com/backstage/backstage/blob/master/mkdocs.yml>
+
 `python-app/mkdocs.yaml`
 
 ```yaml
@@ -82,6 +90,7 @@ plugins:
 # For sidebar navigation on https://backstage.io/, see `microsite/sidebars.json`
 nav:
   - Home: index.md
+  - Test: test.md
 ```
 
 Key fields:
@@ -119,6 +128,20 @@ techdocs:
 
 ## 5. Run Backstage with MkDocs installed in the container
 
+Create a new Dockerfile that extends the base image with MkDocs installed:
+
+```dockerfile
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y python3 python3-pip curl jq nano make g++ && \
+    pip install --break-system-packages mkdocs-techdocs-core
+```
+
+```bash
+docker build -t node:24-bookwork-slim-pro .
+```
+
+### Then use `node:24-bookwork-slim-pro` in the `docker run` line below.
+
 ```bash
 cd backstage-app
 source .env
@@ -132,31 +155,12 @@ docker run --rm \
   --add-host=host.docker.internal:host-gateway \
   -p 3000:3000 -ti -p 7007:7007 \
   -v //d/development/MasterBackstageIdp/backstage-app://app \
-  -w //app node:24-bookworm-slim bash
-
-# inside the container:
-apt-get update && apt-get install -y python3 python3-pip
-pip install --break-system-packages mkdocs-techdocs-core
-
-mkdocs --version   # sanity check
-  # mkdocs, version 1.6.1 from /usr/local/lib/python3.11/dist-packages/mkdocs (Python 3.11)
+  -w //app node:24-bookwork-slim-pro bash
 
 cd backstage
 yarn start
   # ▶ Backstage running at http://localhost:3000
 ```
-
-> 💡 To avoid re-installing MkDocs on every container start, bake it into
-> a custom image:
->
-> ```dockerfile
-> FROM node:24-bookworm-slim
-> RUN apt-get update && apt-get install -y python3 python3-pip && \
->     pip install --break-system-packages mkdocs-techdocs-core
-> ```
->
-> Build once (`docker build -t backstage-dev .`) and swap
-> `node:24-bookworm-slim` → `backstage-dev` in the `docker run` line.
 
 ## 6. Open the docs in Backstage
 
