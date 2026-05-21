@@ -3,8 +3,6 @@ kind: Group
 metadata:
   name: development
   description: Development Team
-  annotations:
-    backstage.io/techdocs-ref: value
 spec:
   type: team
   profile:

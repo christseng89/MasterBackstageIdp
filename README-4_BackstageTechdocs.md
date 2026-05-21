@@ -132,14 +132,11 @@ techdocs:
 
 ```yaml groups.yaml
 ...
-metadata:
-  name: development
-  description: Development Team
-  annotations:
-    backstage.io/techdocs-ref: value
-...
-  # parent: backstage
-  
+  profile:
+    email: development@example.com
+    picture: https://api.dicebear.com/7.x/identicon/svg?seed=Fluffy&backgroundType=solid,gradientLinear&backgroundColor=ffd5dc,b6e3f4
+  children: []
+
 ```
 
 ## 5. Edit App.tsx to add the "Report Issue" button
