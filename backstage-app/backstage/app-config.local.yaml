@@ -63,3 +63,5 @@ techdocs:
     runIn: "local" # ← was 'docker' in app-config.yaml; override here
   publisher:
     type: "local"
+    local:
+      publishDirectory: "/app/techdocs-storage"

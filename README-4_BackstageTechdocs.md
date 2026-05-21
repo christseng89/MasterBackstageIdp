@@ -126,8 +126,23 @@ techdocs:
     runIn: "local"   # ← override 'docker' from app-config.yaml
   publisher:
     type: "local"
+    local:
+      publishDirectory: "/app/techdocs-storage"
 ```
+
+```yaml groups.yaml
+...
+metadata:
+  name: development
+  description: Development Team
+  annotations:
+    backstage.io/techdocs-ref: value
+...
+```
+
 ## 5. Edit App.tsx to add the "Report Issue" button
+
+<https://backstage.io/docs/features/techdocs/getting-started>
 
 `backstage-app/backstage/packages/app/src/App.tsx`
 
@@ -179,6 +194,7 @@ docker run --rm \
   --add-host=host.docker.internal:host-gateway \
   -p 3000:3000 -ti -p 7007:7007 \
   -v //d/development/MasterBackstageIdp/backstage-app://app \
+  -v //d/development/MasterBackstageIdp/techdocs-storage://app/techdocs-storage \
   -w //app node:24-bookwork-slim-pro bash
 
 cd backstage
