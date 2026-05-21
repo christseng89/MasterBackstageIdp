@@ -23,7 +23,7 @@ auth:
             - resolver: usernameMatchingUserEntityName
 catalog:
   rules:
-    - allow: [Component, System, API, Resource, Location]
+    - allow: [Component, Template, System, API, Resource, Location]
 
   locations:
     # Absolute path inside the container (/app = volume mount root on host)
@@ -35,6 +35,10 @@ catalog:
       target: /app/backstage/catalog/entities/groups.yaml
       rules:
         - allow: [Group]
+    - type: url
+      target: https://github.com/christseng89/backstage-software-templates/blob/main/python-app/template.yaml
+      rules:
+        - allow: [Template]
 
 integrations:
   github:
