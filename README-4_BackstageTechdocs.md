@@ -135,8 +135,8 @@ techdocs:
 metadata:
   name: development
   description: Development Team
-  annotations:
-    backstage.io/techdocs-ref: value
+  # annotations:
+  #   backstage.io/techdocs-ref: value
 ...
 ```
 
@@ -183,6 +183,7 @@ docker build -t node:24-bookwork-slim-pro .
 
 ```bash
 cd backstage-app
+mkdir techdocs-storage -p
 source .env
 echo $K8S_SA_TOKEN
 
