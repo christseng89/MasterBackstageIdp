@@ -5,9 +5,9 @@ metadata:
   description: Python app that displays time.
   annotations:
     github.com/project-slug: christseng89/MasterBackstageIdp
-    backstage.io/techdocs-ref: dir:.
     backstage.io/kubernetes-id: python-app
     backstage.io/kubernetes-namespace: python-app
+    backstage.io/techdocs-ref: dir:.
   links:
     - url: http://python-app.test.com:9080/
       title: Hello World
