@@ -1,5 +1,6 @@
 import { createApp } from '@backstage/frontend-defaults';
 import catalogPlugin from '@backstage/plugin-catalog/alpha';
+import { techDocsReportIssueAddonModule } from '@backstage/plugin-techdocs-module-addons-contrib/alpha';  // ← add
 import { navModule } from './modules/nav';
 
 import { githubAuthApiRef } from '@backstage/core-plugin-api';
@@ -28,6 +29,7 @@ export default createApp({
   features: [
     catalogPlugin,
     navModule,
+    techDocsReportIssueAddonModule,   // ← add
     createFrontendModule({
       pluginId: 'app',
       extensions: [signInPage],

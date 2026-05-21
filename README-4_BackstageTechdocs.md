@@ -32,7 +32,9 @@ http://localhost:3000/docs/default/component/python-app
 metadata:
   name: python-app
   annotations:
+    ...
     backstage.io/techdocs-ref: dir:.   # docs live next to this file
+  ...
 ```
 
 `dir:.` means MkDocs config is in the same directory as `catalog-info.yaml`
@@ -125,8 +127,30 @@ techdocs:
   publisher:
     type: "local"
 ```
+## 5. Edit App.tsx to add the "Report Issue" button
 
-## 5. Run Backstage with MkDocs installed in the container
+`backstage-app/backstage/packages/app/src/App.tsx`
+
+```tsx
+import { createApp } from '@backstage/frontend-defaults';
+import catalogPlugin from '@backstage/plugin-catalog/alpha';
+import { techDocsReportIssueAddonModule } from '@backstage/plugin-techdocs-module-addons-contrib/alpha';  // ← add
+import { navModule } from './modules/nav';
+
+...
+  features: [
+    catalogPlugin,
+    navModule,
+    techDocsReportIssueAddonModule,   // ← add
+    createFrontendModule({
+      pluginId: 'app',
+      extensions: [signInPage],
+    }),
+  ],
+...  
+```
+
+## 6. Run Backstage with MkDocs installed in the container
 
 Create a new Dockerfile that extends the base image with MkDocs installed:
 
@@ -162,7 +186,7 @@ yarn start
   # ▶ Backstage running at http://localhost:3000
 ```
 
-## 6. Open the docs in Backstage
+## 7. Open the docs in Backstage
 
 Browser → <http://localhost:3000> → **Catalog → python-app → Docs** tab.
 
@@ -173,7 +197,7 @@ a green banner appears:
 
 Click **REFRESH** — the docs render. Subsequent loads are cached.
 
-## 7. Optional: preview the site standalone (no Backstage)
+## 8. Optional: preview the site standalone (no Backstage)
 
 Useful for fast iteration on markdown content:
 
@@ -186,7 +210,7 @@ mkdocs serve
 
 ## Verification
 
-After step 6 succeeds, you should see in Backstage's terminal log:
+After step 8 succeeds, you should see in Backstage's terminal log:
 
 ```text
 techdocs info Published site stored at
