@@ -135,9 +135,11 @@ techdocs:
 metadata:
   name: development
   description: Development Team
-  # annotations:
-  #   backstage.io/techdocs-ref: value
+  annotations:
+    backstage.io/techdocs-ref: value
 ...
+  # parent: backstage
+  
 ```
 
 ## 5. Edit App.tsx to add the "Report Issue" button
