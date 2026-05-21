@@ -132,12 +132,6 @@ techdocs:
 
 ```yaml groups.yaml
 ...
-metadata:
-  name: development
-  description: Development Team
-  annotations:
-    backstage.io/techdocs-ref: dir:development-docs   # or url:https://...
-...
   profile:
     email: development@example.com
     picture: https://api.dicebear.com/7.x/identicon/svg?seed=Fluffy&backgroundType=solid,gradientLinear&backgroundColor=ffd5dc,b6e3f4
