@@ -7,3 +7,4 @@ spec:
   template:
     spec:
       repository: christseng89/MasterBackstageIdp
+      dockerEnabled: false

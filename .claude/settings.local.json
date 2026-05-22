@@ -18,7 +18,8 @@
       "Bash(git -C \"d:\\\\development\\\\MasterBackstageIdp\" submodule status)",
       "Bash(git pull *)",
       "Bash(git stash *)",
-      "Bash(Remove-Item *)"
+      "Bash(Remove-Item *)",
+      "Bash(git diff *)"
     ]
   }
 }
