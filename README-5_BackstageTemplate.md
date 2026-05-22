@@ -22,3 +22,40 @@ ls -l
     drwxr-xr-x 1 samfi 197609    0 May 21 18:11 template/
     -rw-r--r-- 1 samfi 197609 1689 May 21 18:24 template.yaml
 ```
+
+## Edit app-config.local.yaml
+
+```yaml app-config.local.yaml
+catalog:
+  rules:
+    - allow: [Component, Template, System, API, Resource, Location]
+  locations:
+    # Absolute path inside the container (/app = volume mount root on host)
+    ...
+    - type: url
+      target: https://github.com/christseng89/backstage-software-templates/blob/main/python-app/template.yaml
+      rules:
+        - allow: [Template]
+```
+
+## Setup GitHub repo python-app4
+
+```bash
+
+cd python-app
+kubectl apply -f k8s/python-app.yaml
+kubectl get all
+
+cd ..
+
+source .env
+
+gh auth login
+# From your home directory, a fresh VM, a CI runner, wherever
+gh secret set DOCKERHUB_USERNAME --body $DOCKERHUB_USERNAME --repo christseng89/python-app4
+gh secret set DOCKERHUB_TOKEN --body $DOCKERHUB_TOKEN --repo christseng89/python-app4
+gh secret set ARGOCD_PASSWORD --body $ARGOCD_PASSWORD --repo christseng89/python-app4
+
+gh secret list --repo christseng89/python-app4
+gh secret set API_KEY --body "$KEY" --repo christseng89/python-app4
+```
