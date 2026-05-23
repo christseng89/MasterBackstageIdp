@@ -133,6 +133,26 @@ jobs:
             .
           echo "::notice::Mirrored christseng89/kubectl-bin:${VERSION} (amd64+arm64)"
 
+      # When an input override is provided, write it back to the repo variable
+      # so cicd.yaml stays in sync without a manual Settings update.
+      - name: Update repo variables
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.argocd_version }}" ]; then
+            gh variable set ARGOCD_VERSION --body "${{ inputs.argocd_version }}" --repo ${{ github.repository }}
+            echo "::notice::Updated ARGOCD_VERSION → ${{ inputs.argocd_version }}"
+          fi
+          if [ -n "${{ inputs.yq_version }}" ]; then
+            gh variable set YQ_VERSION --body "${{ inputs.yq_version }}" --repo ${{ github.repository }}
+            echo "::notice::Updated YQ_VERSION → ${{ inputs.yq_version }}"
+          fi
+          if [ -n "${{ inputs.kubectl_version }}" ]; then
+            gh variable set KUBECTL_VERSION --body "${{ inputs.kubectl_version }}" --repo ${{ github.repository }}
+            echo "::notice::Updated KUBECTL_VERSION → ${{ inputs.kubectl_version }}"
+          fi
+
       - name: Summary
         if: always()
         run: |
