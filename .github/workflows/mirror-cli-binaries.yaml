@@ -62,11 +62,11 @@ jobs:
           # has no shell or libc to support a TTY), but setting CMD satisfies
           # the docker daemon's "no command specified" check.
           cat > Dockerfile <<'EOF'
-FROM scratch
-ARG TARGETARCH
-COPY argocd-${TARGETARCH} /argocd
-CMD ["/argocd"]
-EOF
+          FROM scratch
+          ARG TARGETARCH
+          COPY argocd-${TARGETARCH} /argocd
+          CMD ["/argocd"]
+          EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --tag christseng89/argocd-bin:${{ inputs.argocd_version }} \
@@ -86,11 +86,11 @@ EOF
             chmod +x "yq-${arch}"
           done
           cat > Dockerfile <<'EOF'
-FROM scratch
-ARG TARGETARCH
-COPY yq-${TARGETARCH} /yq
-CMD ["/yq"]
-EOF
+          FROM scratch
+          ARG TARGETARCH
+          COPY yq-${TARGETARCH} /yq
+          CMD ["/yq"]
+          EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --tag christseng89/yq-bin:${{ inputs.yq_version }} \
@@ -112,11 +112,11 @@ EOF
             chmod +x "kubectl-${arch}"
           done
           cat > Dockerfile <<'EOF'
-FROM scratch
-ARG TARGETARCH
-COPY kubectl-${TARGETARCH} /kubectl
-CMD ["/kubectl"]
-EOF
+          FROM scratch
+          ARG TARGETARCH
+          COPY kubectl-${TARGETARCH} /kubectl
+          CMD ["/kubectl"]
+          EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --tag christseng89/kubectl-bin:${KUBECTL_VERSION} \
