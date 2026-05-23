@@ -143,6 +143,12 @@ gh secret set DOCKERHUB_TOKEN --body $DOCKERHUB_TOKEN --repo christseng89/Master
 gh secret set ARGOCD_PASSWORD --body $ARGOCD_PASSWORD --repo christseng89/MasterBackstageIdp
 
 gh secret list --repo christseng89/MasterBackstageIdp
+
+gh variable set ARGOCD_VERSION --body "v3.4.2" --repo christseng89/MasterBackstageIdp
+gh variable set YQ_VERSION     --body "v4.44.3" --repo christseng89/MasterBackstageIdp
+gh variable set KUBECTL_VERSION --body "v1.36.1" --repo christseng89/MasterBackstageIdp
+
+gh variable list --repo christseng89/MasterBackstageIdp
 ```
 
 ```bash
