@@ -5,10 +5,11 @@ name: mirror-cli-binaries
 # Copies CLI binaries from GitHub Releases (slow from Asia, especially for
 # arm64 binaries) to Docker Hub (fast Cloudflare CDN with Asia POPs).
 #
-# Run this manually from the Actions tab whenever you bump ARGOCD_VERSION
-# or YQ_VERSION in cicd.yaml. It runs on a GitHub-hosted runner where the
-# fetch from GitHub Releases is fast (internal network), then pushes to
-# Docker Hub for cicd.yaml's CD job to consume.
+# Run this manually from the Actions tab whenever you bump ARGOCD_VERSION,
+# YQ_VERSION, or need to refresh the kubectl mirror in cicd.yaml. It runs on
+# a GitHub-hosted runner where the fetch from GitHub Releases is fast
+# (internal network), then pushes to Docker Hub for cicd.yaml's CD job to
+# consume.
 
 on:
   workflow_dispatch:
@@ -51,7 +52,7 @@ jobs:
           set -euo pipefail
           mkdir -p ctx-argocd && cd ctx-argocd
           for arch in amd64 arm64; do
-            echo "Downloading argocd ${{ inputs.argocd_version }} ${arch}…"
+            echo "Downloading argocd ${{ inputs.argocd_version }} ${arch}..."
             time curl -fSL --retry 3 --retry-delay 5 -o "argocd-${arch}" \
               "https://github.com/argoproj/argo-cd/releases/download/${{ inputs.argocd_version }}/argocd-linux-${arch}"
             chmod +x "argocd-${arch}"
@@ -61,11 +62,11 @@ jobs:
           # has no shell or libc to support a TTY), but setting CMD satisfies
           # the docker daemon's "no command specified" check.
           cat > Dockerfile <<'EOF'
-          FROM scratch
-          ARG TARGETARCH
-          COPY argocd-${TARGETARCH} /argocd
-          CMD ["/argocd"]
-          EOF
+FROM scratch
+ARG TARGETARCH
+COPY argocd-${TARGETARCH} /argocd
+CMD ["/argocd"]
+EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --tag christseng89/argocd-bin:${{ inputs.argocd_version }} \
@@ -79,17 +80,17 @@ jobs:
           set -euo pipefail
           mkdir -p ctx-yq && cd ctx-yq
           for arch in amd64 arm64; do
-            echo "Downloading yq ${{ inputs.yq_version }} ${arch}…"
+            echo "Downloading yq ${{ inputs.yq_version }} ${arch}..."
             time curl -fSL --retry 3 --retry-delay 5 -o "yq-${arch}" \
               "https://github.com/mikefarah/yq/releases/download/${{ inputs.yq_version }}/yq_linux_${arch}"
             chmod +x "yq-${arch}"
           done
           cat > Dockerfile <<'EOF'
-          FROM scratch
-          ARG TARGETARCH
-          COPY yq-${TARGETARCH} /yq
-          CMD ["/yq"]
-          EOF
+FROM scratch
+ARG TARGETARCH
+COPY yq-${TARGETARCH} /yq
+CMD ["/yq"]
+EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --tag christseng89/yq-bin:${{ inputs.yq_version }} \
@@ -97,39 +98,41 @@ jobs:
             .
           echo "::notice::Mirrored christseng89/yq-bin:${{ inputs.yq_version }} (amd64+arm64)"
 
-      - name: Install kubectl
-        shell: bash
+      - name: Mirror kubectl (amd64 + arm64)
         run: |
           set -euo pipefail
-          if [ ! -x /tmp/kubectl ]; then
-            echo "Cache miss — pulling kubectl from Docker Hub mirror..."
-            ARCH="${{ steps.arch.outputs.tag }}"
-            # Get stable version tag first (dl.k8s.io/release/stable.txt is tiny/fast)
-            KUBECTL_VERSION=$(curl -fsSL --max-time 10 https://dl.k8s.io/release/stable.txt)
-            IMG="christseng89/kubectl-bin:${KUBECTL_VERSION}"
-            for i in 1 2 3; do
-              if docker pull --platform "linux/${ARCH}" "$IMG"; then break; fi
-              echo "Attempt $i failed; retrying in ${i}0s..."
-              sleep "${i}0"
-            done
-            cid=$(docker create --platform "linux/${ARCH}" "$IMG" /kubectl)
-            docker cp "$cid:/kubectl" /tmp/kubectl
-            docker rm "$cid" >/dev/null
-            chmod +x /tmp/kubectl
-          else
-            echo "Cache hit — using cached kubectl at /tmp/kubectl"
-          fi
-          sudo cp /tmp/kubectl /usr/local/bin/kubectl
-          kubectl version --client
+          KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+          echo "Mirroring kubectl ${KUBECTL_VERSION}..."
+          mkdir -p ctx-kubectl && cd ctx-kubectl
+          for arch in amd64 arm64; do
+            echo "Downloading kubectl ${KUBECTL_VERSION} ${arch}..."
+            time curl -fSL --retry 3 --retry-delay 5 \
+              -o "kubectl-${arch}" \
+              "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${arch}/kubectl"
+            chmod +x "kubectl-${arch}"
+          done
+          cat > Dockerfile <<'EOF'
+FROM scratch
+ARG TARGETARCH
+COPY kubectl-${TARGETARCH} /kubectl
+CMD ["/kubectl"]
+EOF
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag christseng89/kubectl-bin:${KUBECTL_VERSION} \
+            --push \
+            .
+          echo "KUBECTL_VERSION=${KUBECTL_VERSION}" >> "$GITHUB_ENV"
+          echo "::notice::Mirrored christseng89/kubectl-bin:${KUBECTL_VERSION} (amd64+arm64)"
 
       - name: Summary
         if: always()
         run: |
           cat <<EOF >> "$GITHUB_STEP_SUMMARY"
           ## Mirror complete
-
           | Image | Tag | Pull command |
           |---|---|---|
           | argocd | ${{ inputs.argocd_version || '_(skipped)_' }} | \`docker pull christseng89/argocd-bin:${{ inputs.argocd_version }}\` |
-          | yq     | ${{ inputs.yq_version     || '_(skipped)_' }} | \`docker pull christseng89/yq-bin:${{ inputs.yq_version }}\` |
+          | yq | ${{ inputs.yq_version || '_(skipped)_' }} | \`docker pull christseng89/yq-bin:${{ inputs.yq_version }}\` |
+          | kubectl | ${KUBECTL_VERSION} | \`docker pull christseng89/kubectl-bin:${KUBECTL_VERSION}\` |
           EOF
