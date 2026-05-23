@@ -26,6 +26,7 @@ permissions:
 env:
   ARGOCD_VERSION: v3.4.2
   YQ_VERSION: v4.44.3
+  KUBECTL_VERSION: v1.36.1
   IMAGE_NAME: christseng89/python-app
   VALUES_PATH: python-app/charts/python-app/values.yaml
   ARGOCD_APP: python-app
@@ -112,24 +113,31 @@ jobs:
             *)       echo "Unsupported arch $(uname -m)"; exit 1 ;;
           esac
 
-      # Cache kubectl across runs. Key includes arch; version is always "stable"
-      # so the cache stays valid until manually busted.
+      # Cache kubectl across runs. Key includes version + arch so a bump
+      # automatically invalidates the cache and re-downloads from the mirror.
       - name: Cache kubectl binary
         uses: actions/cache@v4
         with:
           path: /tmp/kubectl
-          key: kubectl-${{ steps.arch.outputs.tag }}-stable
+          key: kubectl-${{ steps.arch.outputs.tag }}-${{ env.KUBECTL_VERSION }}
 
       - name: Install kubectl
         shell: bash
         run: |
           set -euo pipefail
+          IMG="christseng89/kubectl-bin:${{ env.KUBECTL_VERSION }}"
+          PLATFORM="linux/${{ steps.arch.outputs.tag }}"
+
           if [ ! -x /tmp/kubectl ]; then
-            echo "Cache miss — downloading kubectl..."
-            ARCH="${{ steps.arch.outputs.tag }}"
-            KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
-            curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
-              -o /tmp/kubectl
+            echo "Cache miss — pulling kubectl ${{ env.KUBECTL_VERSION }} from Docker Hub mirror..."
+            for i in 1 2 3; do
+              if time docker pull --platform "$PLATFORM" "$IMG"; then break; fi
+              echo "Attempt $i failed; retrying in ${i}0s..."
+              sleep "${i}0"
+            done
+            cid=$(docker create --platform "$PLATFORM" "$IMG" /kubectl)
+            docker cp "$cid:/kubectl" /tmp/kubectl
+            docker rm "$cid" >/dev/null
             chmod +x /tmp/kubectl
           else
             echo "Cache hit — using cached kubectl at /tmp/kubectl"
