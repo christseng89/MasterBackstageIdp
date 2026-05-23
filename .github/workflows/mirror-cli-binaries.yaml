@@ -6,10 +6,9 @@ name: mirror-cli-binaries
 # arm64 binaries) to Docker Hub (fast Cloudflare CDN with Asia POPs).
 #
 # Run this manually from the Actions tab whenever you bump ARGOCD_VERSION,
-# YQ_VERSION, or need to refresh the kubectl mirror in cicd.yaml. It runs on
-# a GitHub-hosted runner where the fetch from GitHub Releases is fast
-# (internal network), then pushes to Docker Hub for cicd.yaml's CD job to
-# consume.
+# YQ_VERSION, or KUBECTL_VERSION in cicd.yaml. It runs on a GitHub-hosted
+# runner where the fetch from GitHub Releases is fast (internal network),
+# then pushes to Docker Hub for cicd.yaml's CD job to consume.
 
 on:
   workflow_dispatch:
@@ -22,6 +21,10 @@ on:
         description: "yq version to mirror (e.g., v4.44.3). Leave blank to skip."
         required: false
         default: "v4.44.3"
+      kubectl_version:
+        description: "kubectl version to mirror (e.g., v1.36.1). Leave blank to skip."
+        required: false
+        default: "v1.36.1"
 
 permissions:
   contents: read
@@ -99,16 +102,15 @@ jobs:
           echo "::notice::Mirrored christseng89/yq-bin:${{ inputs.yq_version }} (amd64+arm64)"
 
       - name: Mirror kubectl (amd64 + arm64)
+        if: ${{ inputs.kubectl_version != '' }}
         run: |
           set -euo pipefail
-          KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
-          echo "Mirroring kubectl ${KUBECTL_VERSION}..."
           mkdir -p ctx-kubectl && cd ctx-kubectl
           for arch in amd64 arm64; do
-            echo "Downloading kubectl ${KUBECTL_VERSION} ${arch}..."
+            echo "Downloading kubectl ${{ inputs.kubectl_version }} ${arch}..."
             time curl -fSL --retry 3 --retry-delay 5 \
               -o "kubectl-${arch}" \
-              "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${arch}/kubectl"
+              "https://dl.k8s.io/release/${{ inputs.kubectl_version }}/bin/linux/${arch}/kubectl"
             chmod +x "kubectl-${arch}"
           done
           cat > Dockerfile <<'EOF'
@@ -119,11 +121,10 @@ jobs:
           EOF
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --tag christseng89/kubectl-bin:${KUBECTL_VERSION} \
+            --tag christseng89/kubectl-bin:${{ inputs.kubectl_version }} \
             --push \
             .
-          echo "KUBECTL_VERSION=${KUBECTL_VERSION}" >> "$GITHUB_ENV"
-          echo "::notice::Mirrored christseng89/kubectl-bin:${KUBECTL_VERSION} (amd64+arm64)"
+          echo "::notice::Mirrored christseng89/kubectl-bin:${{ inputs.kubectl_version }} (amd64+arm64)"
 
       - name: Summary
         if: always()
@@ -134,5 +135,5 @@ jobs:
           |---|---|---|
           | argocd | ${{ inputs.argocd_version || '_(skipped)_' }} | \`docker pull christseng89/argocd-bin:${{ inputs.argocd_version }}\` |
           | yq | ${{ inputs.yq_version || '_(skipped)_' }} | \`docker pull christseng89/yq-bin:${{ inputs.yq_version }}\` |
-          | kubectl | ${KUBECTL_VERSION} | \`docker pull christseng89/kubectl-bin:${KUBECTL_VERSION}\` |
+          | kubectl | ${{ inputs.kubectl_version || '_(skipped)_' }} | \`docker pull christseng89/kubectl-bin:${{ inputs.kubectl_version }}\` |
           EOF
