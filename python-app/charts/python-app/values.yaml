@@ -4,7 +4,7 @@ replicaCount: 1
 image:
   repository: christseng89/python-app
   pullPolicy: IfNotPresent
-  tag: "7fb8f0"
+  tag: "a09638"
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
