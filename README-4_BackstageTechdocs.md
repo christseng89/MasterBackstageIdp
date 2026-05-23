@@ -194,7 +194,7 @@ docker run --rm \
   --add-host=host.docker.internal:host-gateway \
   -p 3000:3000 -ti -p 7007:7007 \
   -v //d/development/MasterBackstageIdp/backstage-app://app \
-  -v //d/development/MasterBackstageIdp/techdocs-storage://app/techdocs-storage \
+  -v //d/development/MasterBackstageIdp/backstage-app/techdocs-storage://app/techdocs-storage \
   -w //app node:24-bookwork-slim-pro bash
 
 cd backstage

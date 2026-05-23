@@ -41,13 +41,6 @@ catalog:
 ## Setup GitHub repo python-app4
 
 ```bash
-
-cd python-app
-kubectl apply -f k8s/python-app.yaml
-kubectl get all
-
-cd ..
-
 source .env
 
 gh auth login
@@ -57,5 +50,55 @@ gh secret set DOCKERHUB_TOKEN --body $DOCKERHUB_TOKEN --repo christseng89/python
 gh secret set ARGOCD_PASSWORD --body $ARGOCD_PASSWORD --repo christseng89/python-app4
 
 gh secret list --repo christseng89/python-app4
-gh secret set API_KEY --body "$KEY" --repo christseng89/python-app4
+
+kubectl apply -f repo-runner.yaml
+kubectl get po
+kubectl get runners
+
+```
+
+### Setup ArgoCD Repository
+
+In ArgoCD → **Settings → Repositories → Connect Repo**:
+
+| Field | Value |
+|---|---|
+| Connection Method | VIA HTTPS |
+| Name | `python-app4` |
+| Project | `default` |
+| Repository URL | `https://github.com/christseng89/python-app4.git` |
+| Username | `christseng89` |
+| Password | _your GitHub PAT_ |
+
+### Create the `python-app4` Application
+
+In ArgoCD → **Applications → New App**:
+
+| Field | Value |
+|---|---|
+| Application Name | `python-app4-dev` |
+| Project | `default` |
+| **Sync Policy** | **Automatic** (with **Auto-Create Namespace** ✅) |
+| Repository URL | `https://github.com/christseng89/python-app4.git` |
+| Revision | `main` |
+| **Path** | **`charts/python-app4`** |
+| Cluster URL | `https://kubernetes.default.svc` |
+| Namespace | `python-app4-dev` |
+| Values Files | `values.yaml` |
+
+## Build image
+docker build -t python-app4:v2 .
+docker tag python-app4:v2 christseng89/python-app4:v2
+docker push christseng89/python-app4:v2
+
+## Test the template
+
+```bash
+cd python-app4
+
+helm install python-app4 charts/python-app4 --namespace python-app4-dev --create-namespace --dry-run="client" --debug
+helm install python-app4 charts/python-app4 --namespace python-app4-dev --create-namespace --set image.tag=v2
+
+# argocd app set python-app4-dev --helm-set ingress.enabled=false
+argocd app sync python-app4-dev
 ```
