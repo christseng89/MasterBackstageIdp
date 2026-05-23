@@ -79,14 +79,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}
           # Reuse Docker layers across builds via a separate buildcache tag on
-          # the same Docker Hub repo. Saves ~60–120s on multi-arch builds.
+          # the same Docker Hub repo. Saves ~60-120s on multi-arch builds.
           cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
 
   cd:
     needs: ci
     runs-on: [self-hosted, linux]
-    # First successful run takes ~5–10 min just to download argocd CLI on a
+    # First successful run takes ~5-10 min just to download argocd CLI on a
     # cold cache. Once actions/cache has saved the binary, subsequent runs
     # drop back under 2 min — at that point you can safely lower this to 10.
     timeout-minutes: 25
@@ -109,8 +109,33 @@ jobs:
           case "$(uname -m)" in
             x86_64)  echo "tag=amd64" >> "$GITHUB_OUTPUT" ;;
             aarch64) echo "tag=arm64" >> "$GITHUB_OUTPUT" ;;
-            *) echo "Unsupported arch $(uname -m)"; exit 1 ;;
+            *)       echo "Unsupported arch $(uname -m)"; exit 1 ;;
           esac
+
+      # Cache kubectl across runs. Key includes arch; version is always "stable"
+      # so the cache stays valid until manually busted.
+      - name: Cache kubectl binary
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kubectl
+          key: kubectl-${{ steps.arch.outputs.tag }}-stable
+
+      - name: Install kubectl
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x /tmp/kubectl ]; then
+            echo "Cache miss — downloading kubectl..."
+            ARCH="${{ steps.arch.outputs.tag }}"
+            KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+            curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
+              -o /tmp/kubectl
+            chmod +x /tmp/kubectl
+          else
+            echo "Cache hit — using cached kubectl at /tmp/kubectl"
+          fi
+          sudo cp /tmp/kubectl /usr/local/bin/kubectl
+          kubectl version --client
 
       # Cache yq across runs. Key includes version + arch so a version bump
       # automatically invalidates the cache and re-downloads.
@@ -128,11 +153,11 @@ jobs:
           PLATFORM="linux/${{ steps.arch.outputs.tag }}"
 
           if [ ! -x /tmp/yq ]; then
-            echo "Cache miss — pulling yq ${{ env.YQ_VERSION }} from Docker Hub mirror…"
-            # Retry up to 3× with backoff in case of intermittent network blips
+            echo "Cache miss — pulling yq ${{ env.YQ_VERSION }} from Docker Hub mirror..."
+            # Retry up to 3x with backoff in case of intermittent network blips
             for i in 1 2 3; do
               if time docker pull --platform "$PLATFORM" "$IMG"; then break; fi
-              echo "Attempt $i failed; retrying in ${i}0s…"
+              echo "Attempt $i failed; retrying in ${i}0s..."
               sleep "${i}0"
             done
             # FROM scratch images have no default CMD, so docker create needs a
@@ -159,7 +184,7 @@ jobs:
           push: true
 
       # Cache argocd CLI across runs. v3.x is ~150 MB — without this the step
-      # takes 30–60s on every CD; cached restore is <1s.
+      # takes 30-60s on every CD; cached restore is <1s.
       - name: Cache argocd CLI
         uses: actions/cache@v4
         with:
@@ -174,10 +199,10 @@ jobs:
           PLATFORM="linux/${{ steps.arch.outputs.tag }}"
 
           if [ ! -x /tmp/argocd ]; then
-            echo "Cache miss — pulling argocd ${{ env.ARGOCD_VERSION }} from Docker Hub mirror…"
+            echo "Cache miss — pulling argocd ${{ env.ARGOCD_VERSION }} from Docker Hub mirror..."
             for i in 1 2 3; do
               if time docker pull --platform "$PLATFORM" "$IMG"; then break; fi
-              echo "Attempt $i failed; retrying in ${i}0s…"
+              echo "Attempt $i failed; retrying in ${i}0s..."
               sleep "${i}0"
             done
             # FROM scratch images have no default CMD — pass /argocd as a dummy
