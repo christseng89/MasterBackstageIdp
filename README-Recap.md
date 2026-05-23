@@ -128,6 +128,9 @@ kubectl get po -n actions-runner-system
 kubectl apply -f python-app/runnerdeployment.yaml
 kubectl get runners
 
+# Grant the runner pod read access to pods/deployments for CD diagnostics
+kubectl apply -f python-app/k8s/runner-rbac.yaml
+
 ```
 
 Github → MasterBackstageIdp → Settings → Actions → `mirror-cli-binaries` -> Run workflow
@@ -141,6 +144,7 @@ gh auth login
 gh secret set DOCKERHUB_USERNAME --body $DOCKERHUB_USERNAME --repo christseng89/MasterBackstageIdp
 gh secret set DOCKERHUB_TOKEN --body $DOCKERHUB_TOKEN --repo christseng89/MasterBackstageIdp
 gh secret set ARGOCD_PASSWORD --body $ARGOCD_PASSWORD --repo christseng89/MasterBackstageIdp
+gh secret set GH_PAT --body $GITHUB_PAT --repo christseng89/MasterBackstageIdp
 
 gh secret list --repo christseng89/MasterBackstageIdp
 

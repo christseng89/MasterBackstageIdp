@@ -244,6 +244,17 @@ jobs:
             --username admin \
             --password "${{ secrets.ARGOCD_PASSWORD }}"
 
+      - name: Register GitHub repo in ArgoCD
+        shell: bash
+        run: |
+          set -euo pipefail
+          # --upsert: safe to call on every run — updates credentials if they
+          # already exist, registers them from scratch after a cluster rebuild.
+          /tmp/argocd repo add ${{ github.server_url }}/${{ github.repository }}.git \
+            --username x-access-token \
+            --password "${{ secrets.GH_PAT }}" \
+            --upsert
+
       - name: Create ArgoCD app if absent
         shell: bash
         run: |
