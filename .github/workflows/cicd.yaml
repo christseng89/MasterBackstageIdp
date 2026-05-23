@@ -263,6 +263,10 @@ jobs:
             echo "App '${{ env.ARGOCD_APP }}' already exists — skipping create."
           else
             echo "App '${{ env.ARGOCD_APP }}' not found — creating..."
+            # --validate=false: skip server-side Helm rendering during creation.
+            # ArgoCD times out rendering charts on resource-constrained clusters
+            # (e.g. Docker Desktop) on first access. The explicit app sync step
+            # below handles the actual manifest generation and deployment.
             /tmp/argocd app create ${{ env.ARGOCD_APP }} \
               --project default \
               --sync-policy automated \
@@ -274,7 +278,8 @@ jobs:
               --path ${{ env.ARGOCD_CHART_PATH }} \
               --dest-server https://kubernetes.default.svc \
               --dest-namespace ${{ env.ARGOCD_APP }} \
-              --values values.yaml
+              --values values.yaml \
+              --validate=false
             echo "App '${{ env.ARGOCD_APP }}' created successfully."
           fi
 
