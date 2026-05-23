@@ -8,8 +8,9 @@ controller:
 
 repoServer:
   replicas: 1
-  extraArgs:
-    - --request-timeout=300s
+  env:
+    - name: ARGOCD_EXEC_TIMEOUT
+      value: "300s"
 
 applicationSet:
   replicas: 1
