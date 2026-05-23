@@ -160,6 +160,20 @@ gh variable set KUBECTL_VERSION --body "v1.36.1" --repo christseng89/MasterBacks
 gh variable list --repo christseng89/MasterBackstageIdp
 ```
 
+### Create a new Dockerfile that extends the base image with MkDocs installed:
+
+```dockerfile
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y python3 python3-pip curl jq nano make g++ && \
+    pip install --break-system-packages mkdocs-techdocs-core
+```
+
+```bash
+docker build -t node:24-bookwork-slim-pro .
+```
+
+### `docker run` Backstage with MkDocs installed
+
 ```bash
 cd backstage-app
 mkdir techdocs-storage -p
