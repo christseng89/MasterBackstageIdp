@@ -130,7 +130,20 @@ kubectl get runners
 
 ```
 
-## Install Backstage 
+Github → MasterBackstageIdp → Settings → Actions → `mirror-cli-binaries` -> Run workflow
+
+## 5 Install Backstage
+
+```bash
+source .env
+gh auth login
+# From your home directory, a fresh VM, a CI runner, wherever
+gh secret set DOCKERHUB_USERNAME --body $DOCKERHUB_USERNAME --repo christseng89/MasterBackstageIdp
+gh secret set DOCKERHUB_TOKEN --body $DOCKERHUB_TOKEN --repo christseng89/MasterBackstageIdp
+gh secret set ARGOCD_PASSWORD --body $ARGOCD_PASSWORD --repo christseng89/MasterBackstageIdp
+
+gh secret list --repo christseng89/MasterBackstageIdp
+```
 
 ```bash
 cd backstage-app

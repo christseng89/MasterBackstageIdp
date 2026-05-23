@@ -28,3 +28,9 @@ configs:
     url: http://argocd.test.com:9080
   params:
     server.insecure: "true"
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      g, admin, role:admin
+    policy.matchMode: glob
+    scopes: "[groups]"
