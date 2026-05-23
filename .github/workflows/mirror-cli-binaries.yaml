@@ -97,6 +97,31 @@ jobs:
             .
           echo "::notice::Mirrored christseng89/yq-bin:${{ inputs.yq_version }} (amd64+arm64)"
 
+      - name: Install kubectl
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x /tmp/kubectl ]; then
+            echo "Cache miss — pulling kubectl from Docker Hub mirror..."
+            ARCH="${{ steps.arch.outputs.tag }}"
+            # Get stable version tag first (dl.k8s.io/release/stable.txt is tiny/fast)
+            KUBECTL_VERSION=$(curl -fsSL --max-time 10 https://dl.k8s.io/release/stable.txt)
+            IMG="christseng89/kubectl-bin:${KUBECTL_VERSION}"
+            for i in 1 2 3; do
+              if docker pull --platform "linux/${ARCH}" "$IMG"; then break; fi
+              echo "Attempt $i failed; retrying in ${i}0s..."
+              sleep "${i}0"
+            done
+            cid=$(docker create --platform "linux/${ARCH}" "$IMG" /kubectl)
+            docker cp "$cid:/kubectl" /tmp/kubectl
+            docker rm "$cid" >/dev/null
+            chmod +x /tmp/kubectl
+          else
+            echo "Cache hit — using cached kubectl at /tmp/kubectl"
+          fi
+          sudo cp /tmp/kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
       - name: Summary
         if: always()
         run: |
