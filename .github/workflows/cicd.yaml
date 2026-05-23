@@ -24,9 +24,9 @@ permissions:
   contents: write
 
 env:
-  ARGOCD_VERSION: v3.4.2
-  YQ_VERSION: v4.44.3
-  KUBECTL_VERSION: v1.36.1
+  ARGOCD_VERSION: ${{ vars.ARGOCD_VERSION }}
+  YQ_VERSION: ${{ vars.YQ_VERSION }}
+  KUBECTL_VERSION: ${{ vars.KUBECTL_VERSION }}
   IMAGE_NAME: christseng89/python-app
   VALUES_PATH: python-app/charts/python-app/values.yaml
   ARGOCD_APP: python-app
