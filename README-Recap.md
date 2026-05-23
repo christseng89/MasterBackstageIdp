@@ -91,6 +91,9 @@ curl http://python-app.test.com:9080/api/v1/info
 
 http://python-app.test.com:9080/
 http://python-app.test.com:9080/api/v1/info
+
+helm uninstall python-app -n python-app
+kubectl delete ns python-app
 ```
 
 ## 3 Install Argo CD
@@ -130,6 +133,8 @@ kubectl get runners
 
 # Grant the runner pod read access to pods/deployments for CD diagnostics
 kubectl apply -f python-app/k8s/runner-rbac.yaml
+kubectl get cr -n actions-runner-system
+kubectl get ClusterRoleBinding | grep arc-runner
 
 ```
 
@@ -160,7 +165,7 @@ cd backstage-app
 mkdir techdocs-storage -p
 source .env
 
-docker run --rm \
+docker run --rm --name backstage-local \
   -e GITHUB_TOKEN=$GITHUB_TOKEN \
   -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID \
   -e AUTH_GITHUB_CLIENT_SECRET=$AUTH_GITHUB_CLIENT_SECRET \
