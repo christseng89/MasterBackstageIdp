@@ -31,6 +31,7 @@ env:
   VALUES_PATH: python-app/charts/python-app/values.yaml
   ARGOCD_APP: python-app
   ARGOCD_SERVER: argocd-server.argocd.svc.cluster.local
+  ARGOCD_CHART_PATH: python-app/charts/python-app
 
 jobs:
   ci:
@@ -224,9 +225,10 @@ jobs:
           fi
           /tmp/argocd version --client
 
-      - name: Argocd app sync
+      - name: ArgoCD login
         shell: bash
         run: |
+          set -euo pipefail
           # In-cluster service DNS is used because argocd.test.com only resolves
           # via the Windows hosts file, which the runner pod can't see.
           # --plaintext: argocd-server has `server.insecure: true`, so the
@@ -241,6 +243,34 @@ jobs:
             --grpc-web \
             --username admin \
             --password "${{ secrets.ARGOCD_PASSWORD }}"
+
+      - name: Create ArgoCD app if absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if /tmp/argocd app get ${{ env.ARGOCD_APP }} > /dev/null 2>&1; then
+            echo "App '${{ env.ARGOCD_APP }}' already exists — skipping create."
+          else
+            echo "App '${{ env.ARGOCD_APP }}' not found — creating..."
+            /tmp/argocd app create ${{ env.ARGOCD_APP }} \
+              --project default \
+              --sync-policy automated \
+              --auto-prune \
+              --self-heal \
+              --sync-option CreateNamespace=true \
+              --repo ${{ github.server_url }}/${{ github.repository }}.git \
+              --revision main \
+              --path ${{ env.ARGOCD_CHART_PATH }} \
+              --dest-server https://kubernetes.default.svc \
+              --dest-namespace ${{ env.ARGOCD_APP }} \
+              --values values.yaml
+            echo "App '${{ env.ARGOCD_APP }}' created successfully."
+          fi
+
+      - name: ArgoCD app sync
+        shell: bash
+        run: |
+          set -euo pipefail
           /tmp/argocd app sync ${{ env.ARGOCD_APP }}
           /tmp/argocd app wait ${{ env.ARGOCD_APP }} --health --timeout 180
 
