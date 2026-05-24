@@ -18,7 +18,7 @@ Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 argocd.test.com"
 You'll need a GitHub Personal Access Token (PAT) so ArgoCD can read this repo.
 
 1. Visit <https://github.com/settings/tokens> → **Generate new token (classic)**.
-2. Name: `MasterBackstageIdp`, scopes: `repo` (full control).
+2. Name: `MasterBackstageIdp`, scopes: `repo`, `workflow` (full control).
 3. Generate, then **copy immediately** — GitHub only shows it once.
 4. Add it to your `.env` file as `GITHUB_PAT`.
 
@@ -59,7 +59,6 @@ kubectl -n kube-system create token backstage --duration=8760h
 
 ```bash
 source .env
-echo $ARGOCD_PASSWORD
 echo $K8S_SA_TOKEN
 ```
 
@@ -68,7 +67,7 @@ echo $K8S_SA_TOKEN
 ```bash
 cd python-app
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
+helm repo update ingress-nginx
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -n ingress-nginx --create-namespace \
   -f charts/nginx/values-nginx.yaml
@@ -94,12 +93,15 @@ http://python-app.test.com:9080/api/v1/info
 
 helm uninstall python-app -n python-app
 kubectl delete ns python-app
+cd ..
+
 ```
 
 ## 3 Install Argo CD
 
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update argo
 helm upgrade --install argocd argo/argo-cd \
   -n argocd --create-namespace \
   -f charts/argocd/values-argo.yaml
@@ -113,10 +115,18 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 http://argocd.test.com:9080/  
 ```
 
+- Add it to your `.env` file as `ARGOCD_PASSWORD`.
+
+```bash
+source .env
+echo $ARGOCD_PASSWORD
+```
+
 ## 4 Install Cert Manager, ARC and Deploy GitHub Self-Hosted Runner
 
 ```bash
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+kubectl get po -n cert-manager
 
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
 helm repo update actions-runner-controller
@@ -126,21 +136,24 @@ helm upgrade --install actions-runner-controller \
   --set authSecret.create=true \
   --set authSecret.github_token=$GITHUB_PAT
 
-kubectl get po -n cert-manager
 kubectl get po -n actions-runner-system
+kubectl get cr -n actions-runner-system
+
 kubectl apply -f python-app/runnerdeployment.yaml
-kubectl get runners
+kubectl get runners -n python-app
 
 # Grant the runner pod read access to pods/deployments for CD diagnostics
 kubectl apply -f python-app/k8s/runner-rbac.yaml
-kubectl get cr -n actions-runner-system
-kubectl get ClusterRoleBinding | grep arc-runner
+
+kubectl get clusterrole | grep python-app
+kubectl get clusterrolebinding | grep python-app
+
+kubectl get clusterrole -n actions-runner-system | grep python-app
+kubectl get clusterrolebinding -n actions-runner-system | grep python-app
 
 ```
 
-Github → MasterBackstageIdp → Settings → Actions → `mirror-cli-binaries` -> Run workflow
-
-## 5 Install Backstage
+## 5 Set GitHub Secrets and Variables for the GitHub Workflows
 
 ```bash
 source .env
@@ -160,6 +173,16 @@ gh variable set KUBECTL_VERSION --body "v1.36.1" --repo christseng89/MasterBacks
 gh variable list --repo christseng89/MasterBackstageIdp
 ```
 
+### Run the GitHub Workflow
+
+Github → MasterBackstageIdp → Settings → Actions → `mirror-cli-binaries` -> Run workflow
+Github → MasterBackstageIdp → Settings → Actions → `cicd` → Run workflow
+
+- http://argocd.test.com:9080/ → Login with username `admin` and the `ARGOCD_PASSWORD` from above → You should see the `python-app` application deployed by the `cicd` workflow
+- http://python-app.test.com:9080/api/v1/info → You should see the JSON response from the Python app
+
+## 6 Install MkDocs into Node Image and Run Backstage Locally
+
 ### Create a new Dockerfile that extends the base image with MkDocs installed:
 
 ```dockerfile
@@ -172,7 +195,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip curl jq nano make g
 docker build -t node:24-bookwork-slim-pro .
 ```
 
-### `docker run` Backstage with MkDocs installed
+### `docker run` Backstage with MkDocs installed Image
 
 ```bash
 cd backstage-app
@@ -188,6 +211,7 @@ docker run --rm --name backstage-local \
   -p 3000:3000 -ti -p 7007:7007 \
   -v //d/development/MasterBackstageIdp/backstage-app://app \
   -v //d/development/MasterBackstageIdp/backstage-app/techdocs-storage://app/techdocs-storage \
+  -v //d/development/Backstage/backstage-software-templates://app/templates:ro \
   -w //app node:24-bookwork-slim-pro bash
 
   ## Wait
@@ -202,3 +226,26 @@ docker run --rm --name backstage-local \
 -> Catalog -> CREATE -> REGISTER EXISTING COMPONENT
 * URL: https://github.com/christseng89/MasterBackstageIdp/blob/main/python-app/catalog-info.yaml
 -> ANALYZE -> IMPORT -> VIEW COMPONENT 
+
+## Create a Python Project
+
+- Open Backstage in your browser (http://localhost:3000).
+-> Catalog -> CREATE -> `CHOOSE` TEMPLATE (Python flask template) -> Python Application -> USE TEMPLATE
+* Component name: `python-app4` 
+* Repository visibility: `Public (dev only)`
+-> REVIEW
+
+### Setup Python Project (python-app4)
+
+```bash
+git clone https://github.com/christseng89/python-app4.git
+cd python-app4
+cp ../.env .env
+./setup.sh
+```
+
+- https://github.com/christseng89/python-app4/actions => python-app4-cicd => Run workflow
+- http://argocd.test.com:9080/ → You should see the `python-app4` application deployed by the `python-app4-cicd` workflow
+- http://python-app4-dev.test.com:9080/ → You should see the JSON response from the Python app
+- http://python-app4-dev.test.com:9080/api/v1/info → You should see the JSON response from the Python app
+- http://python-app4-dev.test.com:9080/api/v1/healthz → You should see the JSON response `{"status": "ok"}`

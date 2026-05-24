@@ -4,31 +4,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is a **Backstage IDP (Internal Developer Portal)** learning project. It contains a sample Python microservice (`python-app`) used to demonstrate a full GitOps/IDP workflow: source → Docker image → Helm chart → ArgoCD → Kubernetes, with the service registered in a Backstage catalog.
+This is a **Backstage IDP (Internal Developer Portal)** learning project. It contains two sample Python microservices (`python-app` and `python-app4`) used to demonstrate different GitOps/IDP workflow patterns: source → Docker image → Helm chart → ArgoCD → Kubernetes, with services registered in a Backstage catalog.
 
 ## Repository Layout
 
-Two top-level directories are Git submodules (untracked by the main repo):
-- `backstage/` — the Backstage application (cloned separately)
-- `charts/` — the Helm charts repo; the CD pipeline updates `charts/python-app/values.yaml` here
+```
+.github/workflows/     # Shared CI/CD pipeline (cicd.yaml) and binary mirror workflow
+python-app/            # Python Flask microservice — single-environment GitOps pattern
+python-app4/           # Python Flask microservice — multi-environment GitOps pattern (dev/staging/prod)
+backstage-app/         # Backstage IDP application (tracked directory, not a submodule)
+  backstage/           # Backstage monorepo — see backstage-app/backstage/CLAUDE.md for dev guidance
+  Dockerfile           # Custom image: Node 24 + Python3 + mkdocs for TechDocs
+  techdocs-storage/    # Built TechDocs output served by Backstage
+actions-runner/        # GitHub Actions self-hosted ARC runner installation
+```
 
-`python-app/charts/` is a **local copy** of the Helm chart used for reference and manual deploys. The CI/CD pipeline writes to `charts/` (the submodule at root), not `python-app/charts/`.
+Two submodules are declared in `.gitmodules` (`backstage` and `charts`) but are **not checked out locally**. The `backstage-app/backstage/` directory is a standalone clone of the Backstage repo; `charts/` (the Helm charts submodule) is also not present locally.
 
-## Running the Python App Locally
+## Running the Python Apps Locally
 
 Python version is managed with `pyenv`; dependencies are managed with `uv`.
 
 ```bash
-cd python-app
+cd python-app          # or python-app4
 pyenv local 3.12.10
 uv sync
 uv pip install -r requirements.txt
 
-# Run the entry-point script
-uv run main.py
-
-# Run the Flask server directly
-python src/app.py   # listens on 0.0.0.0:5000
+uv run main.py          # entry-point script
+python src/app.py       # Flask server on 0.0.0.0:5000
 ```
 
 API endpoints exposed by `src/app.py`:
@@ -41,51 +45,97 @@ There are no automated tests in this repository.
 ## TechDocs Local Preview
 
 ```bash
-cd python-app
+cd python-app          # or python-app4
 pip install mkdocs mkdocs-techdocs-core
 mkdocs serve   # preview at http://localhost:8000
 ```
 
+## Backstage App Development
+
+See **`backstage-app/backstage/CLAUDE.md`** for full guidance. Key commands (run from `backstage-app/backstage/`):
+
+```bash
+yarn start          # frontend (localhost:3000) + backend (localhost:7007)
+yarn build:backend  # build backend for Docker
+yarn build-image    # build custom Backstage Docker image
+yarn lint:all
+yarn test:all
+```
+
+Requires Node 22 or 24 and Yarn 4.4.1 (Yarn Berry). Config layering: `app-config.yaml` → `app-config.local.yaml` → `app-config.production.yaml`.
+
 ## Architecture Overview
 
-### GitOps Pipeline
+### Two GitOps Patterns
 
-The CI/CD flow is fully GitOps (workflow: `python-app/.github/workflows/cicd.yaml`):
+#### python-app — Single Environment
 
-1. **CI** (`ubuntu-latest`): triggered on pushes to `src/**` on `main`. Builds and pushes a Docker image to Docker Hub tagged with the first 6 chars of the commit SHA (`christseng89/python-app:<commit_id>`).
-2. **CD** (`self-hosted` runner): updates `charts/python-app/values.yaml` → `image.tag` (in the `charts/` submodule at repo root) with the new commit ID, commits it back, then triggers `argocd app sync python-app`.
-3. **ArgoCD** watches the repo and reconciles the cluster state from `charts/python-app/values.yaml`.
+Defined in `.github/workflows/cicd.yaml`; triggered on pushes to `python-app/src/**` on `main`:
 
-The image tag in `charts/python-app/values.yaml` is the single source of truth for which version is deployed.
+1. **CI** (`ubuntu-latest`): builds and pushes a **multi-arch** (linux/amd64 + linux/arm64) Docker image to Docker Hub tagged with the first 6 chars of the commit SHA (`christseng89/python-app:<commit_id>`).
+2. **CD** (`self-hosted` ARC runner): uses `yq` to update `image.tag` in `python-app/charts/python-app/values.yaml`, commits back to `main` using `GH_PAT`, then calls `argocd app sync python-app`.
+
+`python-app/charts/python-app/values.yaml` is the single source of truth for the deployed version. ArgoCD app: `python-app`.
+
+#### python-app4 — Multi-Environment (dev / staging / prod)
+
+Two separate workflows in `python-app4/.github/workflows/`:
+
+- **`python-app4-cicd.yaml`** — triggered on `python-app4/src/**` changes: runs CI (build + push image), then CD auto-deploys to **dev** by updating `charts/python-app4/values-dev.yaml` using `GITHUB_TOKEN` + `EndBug/add-and-commit@v9`.
+- **`python-app4-cd.yaml`** — triggered when `values-staging.yaml` or `values-prod.yaml` change (manual promotion flow): detects which values file changed, validates the image tag is non-empty, then syncs the corresponding ArgoCD app (`python-app4-staging` or `python-app4-prod`).
+
+ArgoCD apps: `python-app4-dev` (namespace `dev`), `python-app4-staging` (namespace `staging`), `python-app4-prod` (namespace `prod`).
+
+**Promotion model:** edit the target `values-{env}.yaml` with a new `image.tag` and push to `main` — the CD workflow fires automatically.
 
 ### Helm Chart vs Raw K8s Manifests
 
-Two deployment methods coexist:
-- `python-app/k8s/` — raw Kubernetes manifests (deploy, service, ingress) for direct `kubectl apply` use
-- `python-app/charts/python-app/` — local Helm chart reference copy
-- `charts/python-app/` — Helm chart submodule; what ArgoCD actually reads
-- `python-app/charts/argocd/values-argo.yaml` — values override for deploying ArgoCD itself via Helm
+Each app has both:
+- `<app>/charts/<app>/` — Helm chart; what ArgoCD reads; `values.yaml` is the base, `values-{env}.yaml` per-env overrides
+- `<app>/k8s/` — raw Kubernetes manifests for direct `kubectl apply` use
+
+Shared infrastructure charts:
+- `python-app/charts/argocd/values-argo.yaml` — values override for deploying ArgoCD itself via Helm (domain `argocd.test.com`)
+- `python-app/charts/nginx/values-nginx.yaml` — Nginx Ingress Controller overrides
+
+### ARC Runner
+
+`python-app/runnerdeployment.yaml` deploys a self-hosted GitHub Actions runner (using `actions.summerwind.dev/v1alpha1`) in the `python-app` namespace with `dockerEnabled: true`. `python-app/k8s/runner-rbac.yaml` grants it read access to pods and deployments via a `ClusterRole`. The runner needs in-cluster DNS to reach `argocd-server.argocd.svc.cluster.local`.
 
 ### Backstage Integration
 
-- `python-app/catalog-info.yaml` — registers the service in the Backstage catalog (kind: `Component`, type: `service`)
-- `python-app/mkdocs.yaml` + `python-app/docs/` — TechDocs source; the `techdocs-core` plugin renders it inside Backstage
-- The annotation `backstage.io/techdocs-ref: dir:.` points Backstage at the MkDocs config in the `python-app/` directory
+- `<app>/catalog-info.yaml` — registers the app as a Backstage `Component`; `python-app` also registers an `API` (type: openapi) pointing at `python-app/openapi.yaml`
+- `<app>/mkdocs.yaml` + `<app>/docs/` — TechDocs source; `backstage.io/techdocs-ref: dir:.` points Backstage at the MkDocs config
+- `backstage-app/backstage/catalog/entities/` — `groups.yaml` + `users.yaml` loaded in Docker/production deployments (not in base `app-config.yaml`)
+- TechDocs is configured as `builder: local` — Backstage backend runs mkdocs on demand
 
-### Docker Image
+### Docker Image (python-app / python-app4)
 
-The Dockerfile uses `python:3.10-alpine`, copies only `requirements.txt` and `src/`, and runs `python /src/app.py`. Note: the local dev toolchain uses Python 3.12 via `pyenv`/`uv`, but the container image uses 3.10.
+Both `Dockerfile`s use `python:3.10-alpine`, copy `requirements.txt` and `src/`, run `python /src/app.py`. Local dev uses Python 3.12 via `pyenv`/`uv`; the container uses 3.10.
+
+The custom Backstage image (`backstage-app/Dockerfile`) uses Node 24 + Python3 + mkdocs for in-container TechDocs generation.
+
+### Binary Mirror Workflow
+
+`mirror-cli-binaries.yaml` (exists in both `.github/workflows/` and `python-app4/.github/workflows/`) mirrors ArgoCD, yq, and kubectl binaries to Docker Hub (`christseng89/{argocd,yq,kubectl}-bin`) for fast in-cluster pulls. The CD jobs cache these binaries at `/tmp/{argocd,yq,kubectl}` keyed by version + arch.
 
 ## Key Configuration
 
 | File | Purpose |
 |------|---------|
-| `charts/python-app/values.yaml` | Helm values — `image.tag` is auto-updated by CI/CD (submodule) |
-| `python-app/charts/argocd/values-argo.yaml` | ArgoCD Helm install overrides; domain is `argocd.test.com` |
-| `python-app/k8s/ingress.yaml` | Raw ingress; host is `python-app.test.com` |
-| `python-app/catalog-info.yaml` | Backstage catalog registration |
+| `python-app/charts/python-app/values.yaml` | Helm values — `image.tag` auto-updated by CI/CD |
+| `python-app4/charts/python-app4/values-dev.yaml` | Dev values — `image.tag` auto-updated by CI/CD |
+| `python-app4/charts/python-app4/values-{staging,prod}.yaml` | Manually updated to promote to staging/prod |
+| `python-app/charts/argocd/values-argo.yaml` | ArgoCD Helm install overrides; domain `argocd.test.com` |
+| `python-app/k8s/ingress.yaml` | Raw ingress; host `python-app.test.com` |
+| `python-app/catalog-info.yaml` | Backstage Component + API registration |
+| `python-app/openapi.yaml` | OpenAPI spec served via the Backstage API catalog |
+| `python-app4/catalog-info.yaml` | Backstage Component registration (no API entity) |
+| `backstage-app/backstage/app-config.yaml` | Backstage base config (SQLite, localhost, MCP actions) |
+| `backstage-app/backstage/app-config.local.yaml` | Local overrides (0.0.0.0 binding, GitHub OAuth) |
 
 ## Required Secrets (GitHub Actions)
 
-- `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — Docker Hub push access
-- `ARGOCD_PASSWORD` — ArgoCD admin password for the self-hosted runner
+- `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` — Docker Hub push access (CI jobs)
+- `ARGOCD_PASSWORD` — ArgoCD admin password (CD jobs)
+- `GH_PAT` — GitHub PAT used by `python-app` CD job for git push (python-app4 uses `GITHUB_TOKEN`)

@@ -102,3 +102,22 @@ helm install python-app4 charts/python-app4 --namespace python-app4-dev --create
 # argocd app set python-app4-dev --helm-set ingress.enabled=false
 argocd app sync python-app4-dev
 ```
+
+```bash
+docker run --rm --name backstage-local \
+  -e GITHUB_TOKEN=$GITHUB_TOKEN \
+  -e AUTH_GITHUB_CLIENT_ID=$AUTH_GITHUB_CLIENT_ID \
+  -e AUTH_GITHUB_CLIENT_SECRET=$AUTH_GITHUB_CLIENT_SECRET \
+  -e K8S_SA_TOKEN=$K8S_SA_TOKEN \
+  --add-host=host.docker.internal:host-gateway \
+  -p 3000:3000 -ti -p 7007:7007 \
+  -v //d/development/MasterBackstageIdp/backstage-app://app \
+  -v //d/development/MasterBackstageIdp/backstage-app/techdocs-storage://app/techdocs-storage \
+  -v //d/development/Backstage/backstage-software-templates://app/templates:ro \
+  -w //app node:24-bookwork-slim-pro bash
+
+  ## Wait
+  cd backstage
+  yarn start
+
+```

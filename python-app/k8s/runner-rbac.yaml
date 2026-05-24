@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: arc-runner-reader
+  name: arc-runner-reader-python-app
 rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
@@ -13,12 +13,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: arc-runner-reader
+  name: arc-runner-reader-python-app
 subjects:
   - kind: ServiceAccount
     name: default
-    namespace: default
+    namespace: python-app
 roleRef:
   kind: ClusterRole
-  name: arc-runner-reader
+  name: arc-runner-reader-python-app
   apiGroup: rbac.authorization.k8s.io

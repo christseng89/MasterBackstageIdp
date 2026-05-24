@@ -35,8 +35,12 @@ catalog:
       target: /app/backstage/catalog/entities/groups.yaml
       rules:
         - allow: [Group]
-    - type: url
-      target: https://github.com/christseng89/backstage-software-templates/blob/main/python-app/template.yaml
+    # - type: url
+    #   target: https://github.com/christseng89/backstage-software-templates/blob/main/python-app/template.yaml
+    #   rules:
+    #     - allow: [Template]
+    - type: file
+      target: /app/templates/python-app/template.yaml
       rules:
         - allow: [Template]
 

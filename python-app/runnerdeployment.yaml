@@ -1,7 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: python-app
+---
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
 metadata:
   name: self-hosted-runner
+  namespace: python-app
 spec:
   replicas: 1
   template:
