@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${{values.app_name}}
+spec:
+  selector:
+    app: ${{values.app_name}}
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 5000

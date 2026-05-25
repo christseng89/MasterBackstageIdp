@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${{values.app_name}}
+---
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: self-hosted-runner
+  namespace: ${{values.app_name}}
+spec:
+  replicas: 1
+  template:
+    spec:
+      repository: christseng89/${{values.app_name}}
+      dockerEnabled: true
