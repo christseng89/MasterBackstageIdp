@@ -211,7 +211,7 @@ docker run --rm --name backstage-local \
   -p 3000:3000 -ti -p 7007:7007 \
   -v //d/development/MasterBackstageIdp/backstage-app://app \
   -v //d/development/MasterBackstageIdp/backstage-app/techdocs-storage://app/techdocs-storage \
-  -v //d/development/Backstage/backstage-software-templates://app/templates:ro \
+  -v //d/development/MasterBackstageIdp/backstage-app/templates://app/templates:ro \
   -w //app node:24-bookwork-slim-pro bash
 
   ## Wait
