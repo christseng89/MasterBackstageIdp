@@ -193,6 +193,8 @@ RUN apt-get update && apt-get install -y python3 python3-pip curl jq nano make g
 
 ```bash
 docker build -t node:24-bookwork-slim-pro .
+docker tag node:24-bookwork-slim-pro christseng89/node:24-bookwork-slim-pro
+docker push christseng89/node:24-bookwork-slim-pro
 ```
 
 ### `docker run` Backstage with MkDocs installed Image
@@ -212,7 +214,7 @@ docker run --rm --name backstage-local \
   -v //d/development/MasterBackstageIdp/backstage-app://app \
   -v //d/development/MasterBackstageIdp/backstage-app/techdocs-storage://app/techdocs-storage \
   -v //d/development/MasterBackstageIdp/backstage-app/templates://app/templates:ro \
-  -w //app node:24-bookwork-slim-pro bash
+  -w //app christseng89/node:24-bookwork-slim-pro bash
 
   ## Wait
 

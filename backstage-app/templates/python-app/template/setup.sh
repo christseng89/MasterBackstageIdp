@@ -126,9 +126,16 @@ echo ""
 echo "=== Step 5: Add Windows hosts entry (manual — requires Administrator) ==="
 echo "Open PowerShell as Administrator and run:"
 echo ""
-echo "  Add-Content C:\\Windows\\System32\\drivers\\etc\\hosts \"127.0.0.1 ${{values.app_name}}-dev.test.com\""
+cat <<'PS_BLOCK'
+  $hosts = 'C:\Windows\System32\drivers\etc\hosts'
+  if (-not (Select-String -Path $hosts -Pattern '${{values.app_name}}-dev\.test\.com' -Quiet)) {
+      Add-Content -Path $hosts -Value "127.0.0.1`t${{values.app_name}}-dev.test.com"
+      Write-Host "Added."
+  } else {
+      Write-Host "Already present, skipping."
+  }
+PS_BLOCK
 echo ""
-echo "Skip if the entry already exists."
 
 # ---------------------------------------------------------------------------
 # Step 6 — Trigger the CI/CD workflow
