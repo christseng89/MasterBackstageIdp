@@ -21,3 +21,24 @@ spec:
   type: service
   owner: development
   lifecycle: experimental
+  providesApis:
+    - ${{values.app_name}}-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{values.app_name}}-api
+  description: REST API exposed by ${{values.app_name}} — greeting, info, and health endpoints.
+  tags:
+    - rest
+    - python
+    - flask
+  links:
+    - url: http://${{values.app_name}}-dev.test.com:9080/api/v1/info
+      title: Live /info endpoint
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: development
+  definition:
+    $text: ./openapi.yaml
