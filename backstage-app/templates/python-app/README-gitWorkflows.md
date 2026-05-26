@@ -27,7 +27,7 @@ src/** push to main
    │  cd     │  Self-hosted ARC runner (linux)          cicd.yaml
    │  (dev)  │  • writes commit_id into values-dev.yaml
    │         │  • commits back to main
-   │         │  • ArgoCD registers repo, creates/syncs <app_name>-dev
+   │         │  • ArgoCD syncs <app_name>-dev app → namespace <app_name>-dev
    └─────────┘
         │
         │   User edits values-staging.yaml or values-prod.yaml and commits
@@ -36,7 +36,7 @@ src/** push to main
    │  cd     │  Self-hosted ARC runner (linux)          cd.yaml
    │(stg/prd)│  • detects which env file changed
    │         │  • skips if image.tag is empty
-   │         │  • ArgoCD registers repo, creates/syncs <app_name>-staging or <app_name>-prod
+   │         │  • ArgoCD syncs <app_name>-{env} app → namespace <app_name>-{env}
    └─────────┘
 ```
 
@@ -63,6 +63,7 @@ src/** push to main
 | `ARGOCD_APP` | hardcoded | `<app_name>-dev` — ArgoCD application name for dev |
 | `ARGOCD_SERVER` | hardcoded | `argocd-server.argocd.svc.cluster.local` — in-cluster ArgoCD DNS |
 | `ARGOCD_CHART_PATH` | hardcoded | `charts/<app_name>` — Helm chart path for ArgoCD app create |
+| `DEV_NAMESPACE` | hardcoded | `<app_name>-dev` — Kubernetes namespace the dev deployment targets; ArgoCD auto-creates it via `CreateNamespace=true` |
 
 To upgrade a tool version: update the repo variable in GitHub Settings → Variables (or pass the new version as input to `mirror-cli-binaries.yaml` which auto-updates it). The cache key includes the version string so the next run automatically invalidates and re-downloads.
 
@@ -93,9 +94,9 @@ Runs on `[self-hosted, linux]` (ARC runner pod in-cluster).
 | Cache + install ArgoCD CLI | Same mirror pattern; cold run ~5–10 min, cached <1 s |
 | ArgoCD login | Logs into ArgoCD server via in-cluster DNS with `--plaintext --grpc-web` |
 | Register GitHub repo in ArgoCD | Runs `argocd repo add --username x-access-token --password GH_PAT --upsert` |
-| Create ArgoCD app if absent | Checks `argocd app get`; if missing, runs `argocd app create` with automated sync policy |
+| Create ArgoCD app if absent | Checks `argocd app get`; if missing, runs `argocd app create` targeting namespace `DEV_NAMESPACE` (`<app_name>-dev`) with automated sync, auto-prune, and self-heal |
 | ArgoCD app sync | Runs `argocd app sync` + `argocd app wait --health --timeout 180` |
-| Diagnose on failure | Dumps app state, pod events, and logs when any step above fails |
+| Diagnose on failure | Dumps app state, pod events (from `DEV_NAMESPACE`), and logs when any step above fails |
 
 ### Concurrency
 
@@ -115,6 +116,16 @@ permissions:
 ```
 
 Required for the CD job to commit the updated `values-dev.yaml` back to `main`.
+
+### Init Commit Guard
+
+Both the `ci` and `cd` jobs have:
+
+```yaml
+if: "!contains(github.event.head_commit.message || '', 'init commit')"
+```
+
+This skips the workflow when the Backstage scaffolder creates the repo with its initial "init commit" — preventing a build attempt before secrets and repo variables are configured.
 
 ---
 
@@ -150,16 +161,16 @@ Runs on `[self-hosted, linux]` (ARC runner pod in-cluster).
 | Step | What it does |
 |---|---|
 | Checkout | Checks out the repo |
-| Detect environment | On push: derives env from whichever values file changed (`staging` or `prod`). On `workflow_dispatch`: uses the `environment` input. Sets `DEPLOY_ENV` and `ARGOCD_APP=<app_name>-<env>` |
+| Detect environment | On push: derives env from whichever values file changed (`staging` or `prod`). On `workflow_dispatch`: uses the `environment` input. Sets `DEPLOY_ENV`, `ARGOCD_APP=<app_name>-<env>`, and `DEST_NAMESPACE=<app_name>-<env>` |
 | Validate image tag | Reads `.image.tag` from the values file. If empty, prints a notice and skips all deployment steps |
 | Detect runner architecture | Sets `amd64` or `arm64` |
 | Cache + install kubectl | Same Docker Hub mirror pattern as `cicd.yaml` |
 | Cache + install ArgoCD CLI | Same Docker Hub mirror pattern as `cicd.yaml` |
 | ArgoCD login | Logs into ArgoCD server via in-cluster DNS |
 | Register GitHub repo in ArgoCD | Runs `argocd repo add --upsert` with `GH_PAT` |
-| Create ArgoCD app if absent | Checks `argocd app get`; if missing, creates `<app_name>-<env>` with automated sync policy |
+| Create ArgoCD app if absent | Checks `argocd app get`; if missing, creates `<app_name>-<env>` targeting namespace `DEST_NAMESPACE` (`<app_name>-<env>`) with automated sync, auto-prune, and self-heal |
 | ArgoCD app sync | Runs `argocd app sync` + `argocd app wait --health --timeout 180` |
-| Diagnose on failure | Dumps app state, pods, and logs — skipped if image tag was empty |
+| Diagnose on failure | Dumps app state, pods (from `DEST_NAMESPACE`), and logs — skipped if image tag was empty |
 
 ### Concurrency
 
@@ -179,6 +190,16 @@ permissions:
 ```
 
 Read-only — the values file is already updated by the user's commit. No write-back needed.
+
+### Init Commit Guard
+
+The `cd` job has:
+
+```yaml
+if: "!contains(github.event.head_commit.message || '', 'init commit')"
+```
+
+This prevents a run triggered by a values file accidentally checked in during scaffolding before secrets are configured.
 
 ---
 
@@ -253,11 +274,11 @@ Only Docker Hub push and `gh variable set` (via `GITHUB_TOKEN`) are needed — n
 
 Each environment is independently tracked by its values file:
 
-| File | Updated by | Ingress URL |
-|---|---|---|
-| `values-dev.yaml` | `cicd.yaml` automatically (COMMIT_ID) | `<app_name>-dev.test.com` |
-| `values-staging.yaml` | User commits `image.tag` directly | `<app_name>-staging.test.com` |
-| `values-prod.yaml` | User commits `image.tag` directly | `<app_name>-prod.test.com` |
+| File | Updated by | Kubernetes Namespace | Ingress URL |
+|---|---|---|---|
+| `values-dev.yaml` | `cicd.yaml` automatically (COMMIT_ID) | `<app_name>-dev` | `<app_name>-dev.test.com` |
+| `values-staging.yaml` | User commits `image.tag` directly | `<app_name>-staging` | `<app_name>-staging.test.com` |
+| `values-prod.yaml` | User commits `image.tag` directly | `<app_name>-prod` | `<app_name>-prod.test.com` |
 
 Example — promote staging to `a1b2c3`, prod to `001122`:
 

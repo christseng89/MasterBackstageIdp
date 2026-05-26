@@ -102,7 +102,7 @@ Two separate workflows in `python-app4/.github/workflows/`:
 - **`python-app4-cicd.yaml`** — triggered on `python-app4/src/**` changes: runs CI (build + push image), then CD auto-deploys to **dev** by updating `charts/python-app4/values-dev.yaml` using `GITHUB_TOKEN` + `EndBug/add-and-commit@v9`.
 - **`python-app4-cd.yaml`** — triggered when `values-staging.yaml` or `values-prod.yaml` change (manual promotion flow): detects which values file changed, validates the image tag is non-empty, then syncs the corresponding ArgoCD app (`python-app4-staging` or `python-app4-prod`).
 
-ArgoCD apps: `python-app4-dev` (namespace `dev`), `python-app4-staging` (namespace `staging`), `python-app4-prod` (namespace `prod`).
+ArgoCD apps: `python-app4-dev` (namespace `python-app4-dev`), `python-app4-staging` (namespace `python-app4-staging`), `python-app4-prod` (namespace `python-app4-prod`). Each environment gets its own per-app namespace so RBAC, quotas, and network policies stay scoped per service.
 
 **Promotion model:** edit the target `values-{env}.yaml` with a new `image.tag` and push to `main` — the CD workflow fires automatically.
 
