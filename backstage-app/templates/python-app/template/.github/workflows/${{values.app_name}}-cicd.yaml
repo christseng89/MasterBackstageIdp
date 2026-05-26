@@ -27,6 +27,10 @@ env:
   ARGOCD_APP: ${{values.app_name}}-dev
   ARGOCD_SERVER: argocd-server.argocd.svc.cluster.local
   ARGOCD_CHART_PATH: charts/${{values.app_name}}
+  # Per-app namespace for the dev environment. Derived from app_name so RBAC,
+  # quotas, and network policies stay scoped per service instead of colliding
+  # in a shared `dev` namespace. ArgoCD auto-creates it via CreateNamespace=true.
+  DEV_NAMESPACE: ${{values.app_name}}-dev
 
 jobs:
   ci:
@@ -258,7 +262,7 @@ jobs:
               --revision main \
               --path ${{ '${{ env.ARGOCD_CHART_PATH }}' }} \
               --dest-server https://kubernetes.default.svc \
-              --dest-namespace dev \
+              --dest-namespace ${{ '${{ env.DEV_NAMESPACE }}' }} \
               --values values-dev.yaml \
               --validate=false
             echo "App '${{ '${{ env.ARGOCD_APP }}' }}' created successfully."
@@ -281,9 +285,9 @@ jobs:
           /tmp/argocd app get ${{ '${{ env.ARGOCD_APP }}' }} || true
           echo "=== argocd app history ==="
           /tmp/argocd app history ${{ '${{ env.ARGOCD_APP }}' }} --output wide || true
-          echo "=== pods in dev ns ==="
-          kubectl get pods -n dev -o wide || true
+          echo "=== pods in ${{ '${{ env.DEV_NAMESPACE }}' }} ns ==="
+          kubectl get pods -n ${{ '${{ env.DEV_NAMESPACE }}' }} -o wide || true
           echo "=== deploy describe ==="
-          kubectl describe deploy ${{values.app_name}} -n dev || true
+          kubectl describe deploy ${{values.app_name}} -n ${{ '${{ env.DEV_NAMESPACE }}' }} || true
           echo "=== recent pod logs ==="
-          kubectl logs -n dev -l app.kubernetes.io/name=${{values.app_name}} --tail=200 --all-containers || true
+          kubectl logs -n ${{ '${{ env.DEV_NAMESPACE }}' }} -l app.kubernetes.io/name=${{values.app_name}} --tail=200 --all-containers || true

@@ -57,6 +57,9 @@ jobs:
           fi
           echo "DEPLOY_ENV=${ENV}" >> "$GITHUB_ENV"
           echo "ARGOCD_APP=${{values.app_name}}-${ENV}" >> "$GITHUB_ENV"
+          # Per-app destination namespace, e.g. python-johnny-staging.
+          # Keeps RBAC, quotas, and network policies scoped per service.
+          echo "DEST_NAMESPACE=${{values.app_name}}-${ENV}" >> "$GITHUB_ENV"
 
       - name: Validate image tag
         id: validate
@@ -197,7 +200,7 @@ jobs:
               --revision main \
               --path ${{ '${{ env.ARGOCD_CHART_PATH }}' }} \
               --dest-server https://kubernetes.default.svc \
-              --dest-namespace "$DEPLOY_ENV" \
+              --dest-namespace "$DEST_NAMESPACE" \
               --values "values-${DEPLOY_ENV}.yaml" \
               --validate=false
             echo "App '$ARGOCD_APP' created successfully."
@@ -220,9 +223,9 @@ jobs:
           /tmp/argocd app get "$ARGOCD_APP" || true
           echo "=== argocd app history ==="
           /tmp/argocd app history "$ARGOCD_APP" --output wide || true
-          echo "=== pods in ${DEPLOY_ENV} ns ==="
-          kubectl get pods -n "$DEPLOY_ENV" -o wide || true
+          echo "=== pods in ${DEST_NAMESPACE} ns ==="
+          kubectl get pods -n "$DEST_NAMESPACE" -o wide || true
           echo "=== deploy describe ==="
-          kubectl describe deploy ${{values.app_name}} -n "$DEPLOY_ENV" || true
+          kubectl describe deploy ${{values.app_name}} -n "$DEST_NAMESPACE" || true
           echo "=== recent pod logs ==="
-          kubectl logs -n "$DEPLOY_ENV" -l app.kubernetes.io/name=${{values.app_name}} --tail=200 --all-containers || true
+          kubectl logs -n "$DEST_NAMESPACE" -l app.kubernetes.io/name=${{values.app_name}} --tail=200 --all-containers || true
