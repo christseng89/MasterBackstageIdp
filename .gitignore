@@ -75,4 +75,4 @@ node_modules/
 node_modulesx/
 # backstage-app/
 python-app4/
-# **/techdocs-storage/
+**/techdocs-storage/
