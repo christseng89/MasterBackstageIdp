@@ -22,7 +22,9 @@
       "Bash(git diff *)",
       "Bash(git tag *)",
       "Bash(gh api *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(Get-ChildItem -Path \"D:\\\\development\\\\MasterBackstageIdp\" -Force)",
+      "Bash(Select-Object Name, Mode)"
     ]
   }
 }
