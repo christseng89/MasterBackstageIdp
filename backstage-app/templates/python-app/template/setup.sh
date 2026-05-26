@@ -120,21 +120,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5 — Add hosts entry (requires Windows Administrator — run manually)
+# Step 5 — Add Windows hosts entry (Git Bash, must be Run as Administrator)
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Step 5: Add Windows hosts entry (manual — requires Administrator) ==="
-echo "Open PowerShell as Administrator and run:"
-echo ""
-cat <<'PS_BLOCK'
-  $hosts = 'C:\Windows\System32\drivers\etc\hosts'
-  if (-not (Select-String -Path $hosts -Pattern '${{values.app_name}}-dev\.test\.com' -Quiet)) {
-      Add-Content -Path $hosts -Value "127.0.0.1`t${{values.app_name}}-dev.test.com"
-      Write-Host "Added."
-  } else {
-      Write-Host "Already present, skipping."
-  }
-PS_BLOCK
+echo "=== Step 5: Add Windows hosts entry ==="
+
+HOSTS=/c/Windows/System32/drivers/etc/hosts
+HOST_ENTRY="127.0.0.1 ${{values.app_name}}-dev.test.com"
+
+# Verify Git Bash is running elevated
+if ! net session >/dev/null 2>&1; then
+  echo "⚠  Git Bash is NOT running as Administrator."
+  echo "   Right-click Git Bash → 'Run as administrator', then re-run this script."
+  echo ""
+  echo "   Or, from an Administrator PowerShell, run:"
+  echo "     Add-Content -Path 'C:\\Windows\\System32\\drivers\\etc\\hosts' -Value '$HOST_ENTRY'"
+  exit 1
+fi
+
+if grep -q "${{values.app_name}}-dev.test.com" "$HOSTS"; then
+  echo "✓ Already present, skipping."
+else
+  echo "$HOST_ENTRY" >> "$HOSTS"
+  echo "✓ Added ${{values.app_name}}-dev.test.com to hosts."
+fi
+
 echo ""
 
 # ---------------------------------------------------------------------------
