@@ -5,6 +5,16 @@ app:
 backend:
   listen:
     host: 0.0.0.0
+  # Override the in-memory better-sqlite3 from app-config.yaml with local PostgreSQL.
+  # Same env-var names as app-config.production.yaml, so prod/local stay aligned.
+  database:
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+
 auth:
   environment: development
   providers:

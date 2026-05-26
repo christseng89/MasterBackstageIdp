@@ -21,7 +21,8 @@
       "Bash(Remove-Item *)",
       "Bash(git diff *)",
       "Bash(git tag *)",
-      "Bash(gh api *)"
+      "Bash(gh api *)",
+      "Bash(git *)"
     ]
   }
 }

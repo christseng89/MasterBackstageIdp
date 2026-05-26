@@ -26,14 +26,15 @@ Two submodules are declared in `.gitmodules` (`backstage` and `charts`) but are 
 Python version is managed with `pyenv`; dependencies are managed with `uv`.
 
 ```bash
-cd python-app          # or python-app4
+cd python-app
 pyenv local 3.12.10
 uv sync
 uv pip install -r requirements.txt
 
-uv run main.py          # entry-point script
 python src/app.py       # Flask server on 0.0.0.0:5000
 ```
+
+Note: `uv run main.py` runs a stub that only prints "Hello from python-app!" — it does not start the Flask server.
 
 API endpoints exposed by `src/app.py`:
 - `GET /` — returns "Hello World!"
@@ -64,6 +65,21 @@ yarn test:all
 
 Requires Node 22 or 24 and Yarn 4.4.1 (Yarn Berry). Config layering: `app-config.yaml` → `app-config.local.yaml` → `app-config.production.yaml`.
 
+**`app-config.local.yaml` overrides the base SQLite config with PostgreSQL.** Running `yarn start` locally requires a PostgreSQL instance and these env vars set:
+
+```bash
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_USER=<user>
+export POSTGRES_PASSWORD=<password>
+export GITHUB_TOKEN=<pat>
+export AUTH_GITHUB_CLIENT_ID=<id>
+export AUTH_GITHUB_CLIENT_SECRET=<secret>
+export K8S_SA_TOKEN=<token>   # only if using the Kubernetes plugin
+```
+
+The sign-in resolvers in `app-config.local.yaml` try `emailMatchingUserEntityProfileEmail` first, then `usernameMatchingUserEntityName`. The GitHub user's email or username must match a `User` entity in the catalog.
+
 ## Architecture Overview
 
 ### Two GitOps Patterns
@@ -78,6 +94,8 @@ Defined in `.github/workflows/cicd.yaml`; triggered on pushes to `python-app/src
 `python-app/charts/python-app/values.yaml` is the single source of truth for the deployed version. ArgoCD app: `python-app`.
 
 #### python-app4 — Multi-Environment (dev / staging / prod)
+
+> **Note:** The `python-app4` app directory is not checked out locally — this section documents the multi-environment GitOps pattern it demonstrates.
 
 Two separate workflows in `python-app4/.github/workflows/`:
 
@@ -108,6 +126,20 @@ Shared infrastructure charts:
 - `<app>/mkdocs.yaml` + `<app>/docs/` — TechDocs source; `backstage.io/techdocs-ref: dir:.` points Backstage at the MkDocs config
 - `backstage-app/backstage/catalog/entities/` — `groups.yaml` + `users.yaml` loaded in Docker/production deployments (not in base `app-config.yaml`)
 - TechDocs is configured as `builder: local` — Backstage backend runs mkdocs on demand
+- MCP Actions are enabled in the backend (`pluginSources: auth, catalog, scaffolder`) via `app-config.yaml`
+
+### Scaffolder Template
+
+`backstage-app/templates/python-app/template.yaml` is a Backstage software template that provisions a new Python Flask microservice: it fetches skeleton files from `./template/`, creates a GitHub repo under `christseng89/<component_id>`, and registers the new component in the Backstage catalog. Registered in `app-config.local.yaml` as a local file source (`/app/templates/python-app/template.yaml` inside the container).
+
+### Local Hosts File
+
+The ingress and ArgoCD use custom hostnames that require `/etc/hosts` (Windows: `C:\Windows\System32\drivers\etc\hosts`) entries:
+
+```
+127.0.0.1  python-app.test.com
+127.0.0.1  argocd.test.com
+```
 
 ### Docker Image (python-app / python-app4)
 
