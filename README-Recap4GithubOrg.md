@@ -21,3 +21,9 @@ Github → New Organization (free) →
 gh auth login
 gh repo list intelligent-ltd --limit 10
 ```
+
+## New shell session to use Org variables and secrets
+
+```bash
+./setup-org.sh
+```
