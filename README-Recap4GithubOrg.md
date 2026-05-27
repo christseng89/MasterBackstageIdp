@@ -20,6 +20,21 @@ Github → New Organization (free) →
 ```bash
 gh auth login
 gh repo list intelligent-ltd --limit 10
+
+gh auth refresh -h github.com -s admin:org
+gh auth status
+    github.com
+    ✓ Logged in to github.com account christseng89 (keyring)
+    - Active account: true
+    - Git operations protocol: https
+    - Token: gho_************************************
+    - Token scopes: 'admin:org', 'gist', 'repo', 'workflow'
+
+gh variable set JAVA_VERSION --org intelligent-ltd --body "21"
+gh secret set TEST_SECRET --org intelligent-ltd --visibility all
+
+gh secret list --org intelligent-ltd
+gh variable list --org intelligent-ltd
 ```
 
 ## New shell session to use Org variables and secrets
