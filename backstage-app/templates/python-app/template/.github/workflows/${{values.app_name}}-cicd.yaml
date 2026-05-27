@@ -287,6 +287,10 @@ jobs:
           /tmp/argocd app history ${{ '${{ env.ARGOCD_APP }}' }} --output wide || true
           echo "=== pods in ${{ '${{ env.DEV_NAMESPACE }}' }} ns ==="
           kubectl get pods -n ${{ '${{ env.DEV_NAMESPACE }}' }} -o wide || true
+          echo "=== recent events (last 30, by lastTimestamp) ==="
+          kubectl get events -n ${{ '${{ env.DEV_NAMESPACE }}' }} --sort-by=.lastTimestamp 2>/dev/null | tail -30 || true
+          echo "=== replicasets ==="
+          kubectl get rs -n ${{ '${{ env.DEV_NAMESPACE }}' }} -o wide || true
           echo "=== deploy describe ==="
           kubectl describe deploy ${{values.app_name}} -n ${{ '${{ env.DEV_NAMESPACE }}' }} || true
           echo "=== recent pod logs ==="

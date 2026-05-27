@@ -68,15 +68,24 @@ if ! gh auth status &>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 1 — Register self-hosted runner
+# Step 1 — Register self-hosted runner (in shared github-runners namespace)
 # ---------------------------------------------------------------------------
+# Both files below are idempotent — re-applying them when bootstrapping a
+# second app from this template is safe. Shared resources (namespace,
+# ClusterRole) are no-ops on the second run; only this app's per-app
+# ServiceAccount and RunnerDeployment are net-new.
 echo ""
 echo "=== Step 1: Register self-hosted runner ==="
 kubectl config use-context docker-desktop
-kubectl create namespace "${{values.app_name}}"
-kubectl apply -f runnerdeployment.yaml
+# k8s/runner-rbac.yaml creates:
+#   Namespace        github-runners                        (shared, idempotent)
+#   ServiceAccount   ${{values.app_name}}-self-hosted-runner (per-app)
+#   ClusterRole      arc-runner-reader                     (shared, idempotent)
 kubectl apply -f k8s/runner-rbac.yaml
-echo "Runner registered in namespace ${{values.app_name}}."
+# runnerdeployment.yaml creates the ARC RunnerDeployment in github-runners
+# bound to the per-app ServiceAccount above.
+kubectl apply -f runnerdeployment.yaml
+echo "Runner registered in github-runners namespace as ${{values.app_name}}-self-hosted-runner."
 
 # ---------------------------------------------------------------------------
 # Step 2 — Set GitHub Actions secrets

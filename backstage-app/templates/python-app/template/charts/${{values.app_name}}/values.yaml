@@ -57,3 +57,13 @@ volumeMounts: []
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Runner integration — used by templates/runner-rolebinding.yaml.
+# The chart creates a per-env RoleBinding so the shared ARC runner (running in
+# `runner.namespace` under `runner.serviceAccountName`) can read pods, events,
+# logs, deployments, and replicasets in this env's namespace.
+# Set `runner.enabled: false` if you don't use the bundled ARC runner.
+runner:
+  enabled: true
+  namespace: github-runners
+  serviceAccountName: ${{values.app_name}}-self-hosted-runner

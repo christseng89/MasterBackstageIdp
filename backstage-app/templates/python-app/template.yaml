@@ -21,8 +21,13 @@ spec:
           type: string
           description: Provide a component (microservice) name
           pattern: "^([a-zA-Z][a-zA-Z0-9]*)(-[a-zA-Z0-9]+)*$"
+          # Capped at 30 chars so '<name>-self-hosted-runner-<rs-hash>-<pod-hash>'
+          # (the ARC runner pod name) stays under the 63-char DNS label limit.
+          # Pod hash overhead is ~17 chars, '-self-hosted-runner' is 19 chars,
+          # so 30 leaves a safe ~3 chars of headroom.
+          maxLength: 30
           ui:autofocus: true
-          ui:help: "Use kebab-case, e.g. my-service"
+          ui:help: "Use kebab-case, e.g. my-service (max 30 chars)"
         repoVisibility:
           title: Repository visibility
           type: string
