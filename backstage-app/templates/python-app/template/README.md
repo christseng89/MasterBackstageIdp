@@ -1,7 +1,7 @@
 # ${{values.app_name}}
 
 This repo was scaffolded from the `python-app` Backstage template.
-`setup.sh` handles all post-scaffolding setup — run it once after cloning.
+One setup script handles all post-scaffolding bootstrap — run it once after cloning.
 ArgoCD apps are created automatically on the first successful pipeline run.
 
 ---
@@ -11,21 +11,23 @@ ArgoCD apps are created automatically on the first successful pipeline run.
 ```
 christseng89/${{values.app_name}}/
 ├── .github/workflows/
-│   ├── ${{values.app_name}}-cicd.yaml    ← CI + deploy to dev (auto on src/ push)
-│   ├── ${{values.app_name}}-cd.yaml      ← promote staging/prod (auto on values file change)
-│   └── mirror-cli-binaries.yaml          ← mirror tool binaries to Docker Hub (manual)
+│   ├── ${{values.app_name}}-cicd.yaml       ← CI + deploy to dev (auto on src/ push)
+│   ├── ${{values.app_name}}-staging-cd.yaml ← promote to staging (auto on values-staging.yaml change)
+│   ├── ${{values.app_name}}-prod-cd.yaml    ← promote to prod (auto on values-prod.yaml change)
+│   └── mirror-cli-binaries.yaml             ← mirror tool binaries to Docker Hub (manual)
 ├── charts/${{values.app_name}}/
-│   ├── values.yaml                        ← base Helm defaults
-│   ├── values-dev.yaml                    ← image.tag written by cicd.yaml automatically
-│   ├── values-staging.yaml                ← set image.tag here to promote to staging
-│   ├── values-prod.yaml                   ← set image.tag here to promote to prod
-│   └── templates/                         ← Deployment, Service, Ingress
-├── src/                                   ← application source code
+│   ├── values.yaml                           ← base Helm defaults
+│   ├── values-dev.yaml                       ← image.tag written by cicd.yaml automatically
+│   ├── values-staging.yaml                   ← set image.tag here to promote to staging
+│   ├── values-prod.yaml                      ← set image.tag here to promote to prod
+│   └── templates/                            ← Deployment, Service, Ingress
+├── src/                                      ← application source code
 ├── Dockerfile
-├── catalog-info.yaml                      ← Backstage component registration
-├── runnerdeployment.yaml                  ← ARC self-hosted runner spec
-├── setup.sh                               ← automates all post-scaffolding steps
-└── mkdocs.yaml + docs/                    ← TechDocs source
+├── catalog-info.yaml                         ← Backstage component registration
+├── runnerdeployment.yaml                     ← ARC self-hosted runner spec
+├── setup.sh                                  ← bootstrap: secrets/variables set per-repository
+├── setup-org.sh                              ← bootstrap: secrets/variables set at org level (shared)
+└── mkdocs.yaml + docs/                       ← TechDocs source
 ```
 
 ---
@@ -41,7 +43,7 @@ cd ${{values.app_name}}
 
 ### 2. Create `.env`
 
-`setup.sh` sources this file before doing anything. Create it in the repo root:
+Both setup scripts source this file before doing anything. Create it in the repo root:
 
 ```bash
 cat > .env <<'EOF'
@@ -60,14 +62,34 @@ EOF
 
 > `.env` is git-ignored — never commit it.
 
-### 3. Run setup.sh
+### 3. Choose and run a setup script
+
+Two scripts are provided. Pick the one that matches your GitHub setup:
+
+| | `setup.sh` | `setup-org.sh` |
+|---|---|---|
+| **Secrets/variables scope** | This repository only | `intelligent-ltd` org (all repos inherit) |
+| **When to use** | Standalone repo or personal account | Multiple scaffolded repos sharing the same credentials |
+| **gh token scope needed** | `repo` | `repo` + `admin:org` |
+| **Idempotent on re-run** | Overwrites existing values | Skips any secret/variable already present in the org |
+
+**Option A — per-repository (setup.sh)**
 
 ```bash
 gh auth login          # one-time, if not already authenticated
 bash setup.sh          # runs all steps and triggers the first CI/CD pipeline
 ```
 
-Common flags:
+**Option B — org-level (setup-org.sh)**
+
+Your `gh` token must have the `admin:org` scope. If needed, refresh it first:
+
+```bash
+gh auth refresh -s admin:org
+bash setup-org.sh      # sets secrets/variables in intelligent-ltd org, then triggers pipeline
+```
+
+Common flags (work with either script):
 
 ```bash
 bash setup.sh --skip-mirror               # skip mirroring if Docker Hub images already exist
@@ -77,13 +99,14 @@ bash setup.sh --skip-mirror --skip-cicd
 
 ### 4. Add Windows hosts entry (manual — requires Administrator)
 
-`setup.sh` cannot write to the Windows hosts file. Open **PowerShell as Administrator** and run:
+The setup scripts detect whether Git Bash is running as Administrator. If not, they print the
+command but cannot write the hosts file automatically. Open **PowerShell as Administrator** and run:
 
 ```powershell
 Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 ${{values.app_name}}-dev.test.com"
 ```
 
-> `setup.sh` prints this command as a reminder. Skip if the entry already exists.
+> Skip if the entry already exists.
 
 ### 5. Verify
 
@@ -134,7 +157,7 @@ git push origin main
 ```
 
 ```
-cd.yaml triggers automatically
+staging-cd.yaml triggers automatically
   → ArgoCD creates/syncs ${{values.app_name}}-staging
   → accessible at ${{values.app_name}}-staging.test.com:9080
 ```
@@ -155,7 +178,7 @@ git push origin main
 ```
 
 ```
-cd.yaml triggers automatically
+prod-cd.yaml triggers automatically
   → ArgoCD creates/syncs ${{values.app_name}}-prod
   → accessible at ${{values.app_name}}-prod.test.com:9080
 ```
@@ -166,10 +189,10 @@ cd.yaml triggers automatically
 
 ---
 
-## Appendix: What setup.sh Does
+## Appendix: What the Setup Scripts Do
 
-`setup.sh` runs the following six steps in order. The flags `--skip-mirror` and
-`--skip-cicd` skip steps 4 and 6 respectively.
+Both scripts run the same six steps in order. Steps 2 and 3 differ between the two.
+The flags `--skip-mirror` and `--skip-cicd` skip steps 4 and 6 respectively.
 
 ### Step 1 — Register the Self-Hosted Runner
 
@@ -177,18 +200,21 @@ Applies the ARC runner and its RBAC to the local Docker Desktop Kubernetes clust
 
 ```bash
 kubectl config use-context docker-desktop
-kubectl create namespace ${{values.app_name}}
-kubectl apply -f runnerdeployment.yaml
 kubectl apply -f k8s/runner-rbac.yaml
+kubectl apply -f runnerdeployment.yaml
 ```
 
-The namespace is created first so both manifests can be applied without ordering
-constraints. `runner-rbac.yaml` then creates the `arc-runner-reader` Role and
-RoleBinding inside it, granting the runner read access to pods and deployments.
+`runner-rbac.yaml` creates the shared `github-runners` namespace, a per-app
+ServiceAccount, and the `arc-runner-reader` ClusterRole. All three are idempotent —
+safe to re-run when bootstrapping additional apps from this template.
+
+---
 
 ### Step 2 — Set GitHub Actions Secrets
 
-Sources `.env` and pushes four secrets to the repo:
+**`setup.sh` — per-repository**
+
+Sets four secrets directly on this repo:
 
 ```bash
 gh secret set DOCKERHUB_USERNAME --body "$DOCKERHUB_USERNAME" --repo christseng89/${{values.app_name}}
@@ -197,13 +223,33 @@ gh secret set ARGOCD_PASSWORD    --body "$ARGOCD_PASSWORD"    --repo christseng8
 gh secret set GH_PAT             --body "$GITHUB_PAT"         --repo christseng89/${{values.app_name}}
 ```
 
+**`setup-org.sh` — org-level**
+
+Checks each secret in the `intelligent-ltd` org first; only sets it if absent:
+
+```bash
+# for each of: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, ARGOCD_PASSWORD, GH_PAT
+if <secret already exists in org>; then
+  echo "$name already exists in org — skipping."
+else
+  gh secret set "$name" --body "..." --org intelligent-ltd --visibility all
+fi
+```
+
+All repos in the org inherit org-level secrets automatically — no per-repo configuration needed
+for subsequent scaffolded apps.
+
 `GH_PAT` (from `GITHUB_PAT`) is used by the CD jobs to register this repo in ArgoCD
 via `argocd repo add`. Create one at GitHub → Settings → Developer settings →
 Personal access tokens with **`repo`** scope.
 
+---
+
 ### Step 3 — Set GitHub Actions Variables
 
-Sets three tool-version variables used by all workflows:
+**`setup.sh` — per-repository**
+
+Sets three tool-version variables on this repo:
 
 ```bash
 gh variable set ARGOCD_VERSION  --body "$ARGOCD_VERSION"  --repo christseng89/${{values.app_name}}
@@ -211,9 +257,24 @@ gh variable set YQ_VERSION      --body "$YQ_VERSION"       --repo christseng89/$
 gh variable set KUBECTL_VERSION --body "$KUBECTL_VERSION"  --repo christseng89/${{values.app_name}}
 ```
 
+**`setup-org.sh` — org-level**
+
+Checks each variable in the `intelligent-ltd` org first; only sets it if absent:
+
+```bash
+# for each of: ARGOCD_VERSION, YQ_VERSION, KUBECTL_VERSION
+if <variable already exists in org>; then
+  echo "$name already exists in org — skipping."
+else
+  gh variable set "$name" --body "..." --org intelligent-ltd --visibility all
+fi
+```
+
 Defaults (`v3.4.2` / `v4.44.3` / `v1.36.1`) are used unless overridden in `.env`.
 Variables (not secrets) let `mirror-cli-binaries.yaml` update them automatically
 when a version override is passed as a workflow input.
+
+---
 
 ### Step 4 — Mirror CLI Binaries to Docker Hub
 
@@ -223,13 +284,20 @@ images before the first CD run needs them.
 
 Skip with `--skip-mirror` if the mirrors already exist at the configured versions.
 
-### Step 5 — Add Windows Hosts Entry (printed only — cannot be automated)
+---
 
-`setup.sh` prints the following command but cannot execute it (requires Administrator):
+### Step 5 — Add Windows Hosts Entry
 
-```powershell
-Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 ${{values.app_name}}-dev.test.com"
+Checks whether Git Bash is running as Administrator. If yes, writes the entry directly:
+
 ```
+127.0.0.1 ${{values.app_name}}-dev.test.com
+```
+
+If not running as Administrator, prints the PowerShell command to run manually (see
+Admin Setup step 4 above) and exits with an error so the issue is not silently skipped.
+
+---
 
 ### Step 6 — Trigger the First CI/CD Run
 
