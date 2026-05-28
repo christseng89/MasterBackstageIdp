@@ -11,13 +11,16 @@ This is a **Backstage IDP (Internal Developer Portal)** learning project. It con
 ```
 .github/workflows/     # Shared CI/CD pipeline (cicd.yaml) and binary mirror workflow
 python-app/            # Python Flask microservice — single-environment GitOps pattern
-python-app4/           # Python Flask microservice — multi-environment GitOps pattern (dev/staging/prod)
 backstage-app/         # Backstage IDP application (tracked directory, not a submodule)
   backstage/           # Backstage monorepo — see backstage-app/backstage/CLAUDE.md for dev guidance
   Dockerfile           # Custom image: Node 24 + Python3 + mkdocs for TechDocs
-  techdocs-storage/    # Built TechDocs output served by Backstage
+  templates/           # Backstage scaffolder templates
+techdocs-storage/      # Built TechDocs output served by Backstage (repo root, mounted into container)
+setup-org.sh           # Org-level secrets/variables bootstrap (reference only — per-repo secrets used instead)
 actions-runner/        # GitHub Actions self-hosted ARC runner installation
 ```
+
+`python-app4/` is **not checked out locally** — it exists only in the remote to document the multi-environment pattern.
 
 Two submodules are declared in `.gitmodules` (`backstage` and `charts`) but are **not checked out locally**. The `backstage-app/backstage/` directory is a standalone clone of the Backstage repo; `charts/` (the Helm charts submodule) is also not present locally.
 

@@ -1,0 +1,79 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+
+kind: Template
+
+metadata:
+  name: python-template-multi-apis
+  title: Python flask multi-API-version template
+  description: |
+    Provisions a Python flask service that demonstrates the additive
+    multi-API-version pattern — one image simultaneously serves
+    /api/v1, /api/v2, /api/v3 with v1 marked deprecated, v2 production,
+    v3 experimental. Generates 3 Backstage API entities + matching
+    OpenAPI specs and RFC 9745/8594 deprecation headers.
+
+spec:
+  owner: development
+  type: service
+
+  parameters:
+    - title: Fill in some steps
+      required:
+        - component_id
+      properties:
+        component_id:
+          title: Component name
+          type: string
+          description: Provide a component (microservice) name
+          pattern: "^([a-zA-Z][a-zA-Z0-9]*)(-[a-zA-Z0-9]+)*$"
+          # Capped at 30 chars so '<name>-self-hosted-runner-<rs-hash>-<pod-hash>'
+          # (the ARC runner pod name) stays under the 63-char DNS label limit.
+          maxLength: 30
+          ui:autofocus: true
+          ui:help: "Use kebab-case, e.g. my-service (max 30 chars)"
+        repoVisibility:
+          title: Repository visibility
+          type: string
+          description: "Private: source code hidden from public. Public: development only."
+          default: private
+          enum:
+            - private
+            - public
+          enumNames:
+            - "Private (recommended)"
+            - "Public (dev only)"
+
+  steps:
+    - id: fetch-base
+      name: Fetch Base
+      action: fetch:template
+      input:
+        url: ./template
+        values:
+          app_name: ${{ parameters.component_id }}
+
+    - id: publish
+      name: Publish
+      action: publish:github
+      input:
+        description: This is ${{ parameters.component_id }} (multi-API-version pattern)
+        repoUrl: github.com?owner=christseng89&repo=${{ parameters.component_id }}
+        defaultBranch: main
+        protectDefaultBranch: false
+        repoVisibility: ${{ parameters.repoVisibility }}
+        gitCommitMessage: "init commit (multi-api template)"
+
+    - id: register
+      name: Register
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['publish'].output.repoContentsUrl }}
+        catalogInfoPath: "/catalog-info.yaml"
+
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps['publish'].output.remoteUrl }}
+      - title: Open in Catalog
+        icon: catalog
+        url: ${{ steps['register'].output.entityRef }}

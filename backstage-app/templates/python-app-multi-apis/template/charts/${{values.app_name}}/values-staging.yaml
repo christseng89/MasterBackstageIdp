@@ -1,0 +1,26 @@
+replicaCount: 2
+
+# Staging mirrors prod's default API version so promotion is a no-op
+# from an API-contract perspective — only the image tag changes.
+apiVersions:
+  default: v2
+  supported: "v1,v2,v3"
+  deprecated: "v1"
+
+image:
+  tag: ""
+
+ingress:
+  hosts:
+    - host: ${{values.app_name}}-staging.test.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 50M
+  limits:
+    cpu: 250m
+    memory: 200M

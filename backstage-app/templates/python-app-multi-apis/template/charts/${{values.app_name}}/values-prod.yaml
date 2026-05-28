@@ -1,0 +1,26 @@
+replicaCount: 3
+
+# Prod stays on v2 (production lifecycle). v3 only ships to prod after it
+# has been promoted to `lifecycle: production` in catalog-info.yaml.
+apiVersions:
+  default: v2
+  supported: "v1,v2,v3"
+  deprecated: "v1"
+
+image:
+  tag: ""
+
+ingress:
+  hosts:
+    - host: ${{values.app_name}}-prod.test.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  requests:
+    cpu: 60m
+    memory: 60M
+  limits:
+    cpu: 300m
+    memory: 240M

@@ -53,6 +53,10 @@ catalog:
       target: /app/templates/python-app/template.yaml
       rules:
         - allow: [Template]
+    - type: file
+      target: /app/templates/python-app-multi-apis/template.yaml
+      rules:
+        - allow: [Template]
 
 integrations:
   github:

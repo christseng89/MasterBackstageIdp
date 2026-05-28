@@ -1,0 +1,13 @@
+site_name: '${{values.app_name}}'
+site_description: 'Main documentation for the ${{values.app_name}}'
+repo_url: https://github.com/christseng89/${{values.app_name}}
+edit_uri: edit/main/docs
+
+plugins:
+  - techdocs-core
+
+# For sidebar navigation on https://backstage.io/, see `microsite/sidebars.json`
+nav:
+  - Home: index.md
+  - API versions: api-versions.md
+  - Migration v1 → v2: migration-v1-to-v2.md

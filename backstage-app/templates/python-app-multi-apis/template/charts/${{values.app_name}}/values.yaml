@@ -1,0 +1,87 @@
+commonLabels:
+  backstage.io/kubernetes-id: ${{values.app_name}}
+replicaCount: 1
+
+# ---------------------------------------------------------------------------
+# Multi-API-version metadata
+# ---------------------------------------------------------------------------
+# `apiVersions.default` is the version the container reports via the
+# `DEFAULT_API_VERSION` env (read by /version endpoint) AND the value written
+# to the `app.kubernetes.io/version` label so the Backstage K8s plugin shows
+# it. `apiVersions.supported` / `deprecated` are advertised on /version too.
+#
+# Override per environment in values-{dev,staging,prod}.yaml.
+apiVersions:
+  default: v2
+  supported: "v1,v2,v3"
+  deprecated: "v1"
+
+# `git.sha` lets workflows inject the actual commit SHA into the running pod
+# (visible via /version + /api/v3/env). When unset, image.tag is used as a
+# best-effort fallback.
+git:
+  sha: ""
+
+image:
+  repository: christseng89/${{values.app_name}}
+  pullPolicy: IfNotPresent
+  # Placeholder — overridden by values-dev/staging/prod.yaml in the GitOps flow.
+  tag: v2
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+podLabels: {}
+serviceAccount:
+  create: false
+  automount: true
+  annotations: {}
+  name: ""
+podSecurityContext: {}
+securityContext: {}
+service:
+  type: ClusterIP
+  port: 5000
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: ${{values.app_name}}-dev.test.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+resources:
+  requests:
+    cpu: 50m
+    memory: 50M
+  limits:
+    cpu: 200m
+    memory: 200M
+# Health probes hit v2 (production default). When v1 is fully retired the path
+# stays the same; when v3 is promoted to production, bump these to /api/v3/healthz.
+livenessProbe:
+  httpGet:
+    path: /api/v2/healthz
+    port: http
+readinessProbe:
+  httpGet:
+    path: /api/v2/healthz
+    port: http
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+volumes: []
+volumeMounts: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Runner integration — used by templates/runner-rolebinding.yaml.
+runner:
+  enabled: true
+  namespace: github-runners
+  serviceAccountName: ${{values.app_name}}-self-hosted-runner

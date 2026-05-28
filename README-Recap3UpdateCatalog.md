@@ -376,3 +376,11 @@ shipping multiple critical services through this path.
 │                     │         │      └─ env var BACKSTAGE_CI_TOKEN│
 └─────────────────────┘         └──────────────────────────────────┘
 ```
+
+## Troubleshooting
+
+Backstage => Catalog => Select Component => Kubernetes
+
+- If the pos error, then kubectl rollout restart deployment <name-of-app-deployment> -n <namespace>
+  For example, kubectl rollout restart deployment python-app -n python-app
+- One Backstage catalog can refer to all related environments in Kubernetes, such as dev, staging, prod. 

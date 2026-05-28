@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "${{values.app_name}}.fullname" . }}
+  labels:
+    {{- include "${{values.app_name}}.labels" . | nindent 4 }}
+    # Surfaces the default API version on the Deployment object itself —
+    # `kubectl get deploy -L app.kubernetes.io/version` and Backstage K8s
+    # plugin both display it directly.
+    app.kubernetes.io/version: {{ .Values.apiVersions.default | quote }}
+  annotations:
+    api.example.com/default-version: {{ .Values.apiVersions.default | quote }}
+    api.example.com/supported-versions: {{ .Values.apiVersions.supported | quote }}
+    api.example.com/deprecated-versions: {{ .Values.apiVersions.deprecated | quote }}
+    api.example.com/backstage-refs: "api:default/${{values.app_name}}-api-v1,api:default/${{values.app_name}}-api-v2,api:default/${{values.app_name}}-api-v3"
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "${{values.app_name}}.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "${{values.app_name}}.labels" . | nindent 8 }}
+        app.kubernetes.io/version: {{ .Values.apiVersions.default | quote }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "${{values.app_name}}.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Multi-API-version metadata exposed to the running process.
+          # The /version endpoint, /api/v3/env, and deprecated_headers
+          # middleware all read these env vars.
+          env:
+            - name: APP_NAME
+              value: "${{values.app_name}}"
+            - name: IMAGE_TAG
+              value: {{ .Values.image.tag | quote }}
+            - name: GIT_SHA
+              value: {{ .Values.git.sha | default .Values.image.tag | quote }}
+            - name: DEFAULT_API_VERSION
+              value: {{ .Values.apiVersions.default | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
