@@ -119,8 +119,10 @@ The sign-in resolvers in `app-config.local.yaml` try `emailMatchingUserEntityPro
 
 Defined in `.github/workflows/cicd.yaml`; triggered on pushes to `python-app/src/**` on `main`:
 
-1. **CI** (`ubuntu-latest`): builds and pushes a **multi-arch** (linux/amd64 + linux/arm64) Docker image to Docker Hub tagged with the first 6 chars of the commit SHA (`christseng89/python-app:<commit_id>`).
+1. **CI** (`ubuntu-latest`): builds and pushes a **multi-arch** (linux/amd64 + linux/arm64) Docker image using QEMU + Docker Buildx on a single runner; a separate `buildcache` tag is reused across builds to save 60–120 s. Image is tagged with the first 6 chars of the commit SHA (`christseng89/python-app:<commit_id>`).
 2. **CD** (`self-hosted` ARC runner): uses `yq` to update `image.tag` in `python-app/charts/python-app/values.yaml`, commits back to `main` using `GH_PAT`, then calls `argocd app sync python-app`.
+
+Both jobs skip when the commit message contains `"init commit"` (prevents a deploy loop on first scaffold). The workflow uses `concurrency: cancel-in-progress: false` — an in-progress CD job always finishes rather than being cancelled, preventing a race on `values.yaml`.
 
 `python-app/charts/python-app/values.yaml` is the single source of truth for the deployed version. ArgoCD app: `python-app`.
 
@@ -147,6 +149,8 @@ Shared infrastructure charts:
 - `python-app/charts/argocd/values-argo.yaml` — values override for deploying ArgoCD itself via Helm (domain `argocd.test.com`)
 - `python-app/charts/nginx/values-nginx.yaml` — Nginx Ingress Controller overrides
 
+Scaffolded Helm charts set `commonLabels."backstage.io/kubernetes-id": <app_name>` so the Backstage Kubernetes plugin can discover pods without additional annotation. Liveness/readiness probe path is `/api/v1/healthz`. Ingress hostnames follow `<app_name>-<env>.test.com`. ArgoCD creates namespaces automatically (`CreateNamespace=true` sync option); staging/prod workflows pass `--validate=false` on `argocd app create` to avoid timeout on resource-constrained Docker Desktop clusters.
+
 ### ARC Runner
 
 The original `python-app/runnerdeployment.yaml` deploys a runner in the `python-app` namespace. The scaffolder template uses a different, multi-app design:
@@ -166,11 +170,21 @@ The runner needs in-cluster DNS to reach `argocd-server.argocd.svc.cluster.local
 - TechDocs is configured as `builder: local` — Backstage backend runs mkdocs on demand
 - MCP Actions are enabled in the backend (`pluginSources: auth, catalog, scaffolder`) via `app-config.yaml`
 
+Non-obvious app-config details:
+- **Catalog root:** The catalog page is served at `/` (not `/catalog`) — four default nav items are disabled in the extensions block and re-rendered manually in `Sidebar.tsx`.
+- **Permission framework:** Enabled (`permission.enabled: true`) with an allow-all policy — replace for production hardening.
+- **Kubernetes plugin:** Uses `multiTenant` service locator; the `backstage.io/kubernetes-id` annotation on each component drives pod discovery. `skipTLSVerify: true` is set for the Docker Desktop cluster's self-signed cert.
+- **`app-config.production.yaml` is intentionally incomplete** — catalog locations still point to example entities; integrate production catalog URLs before deploying.
+
 ### Scaffolder Templates
 
 Two templates live under `backstage-app/templates/`; both are registered in `app-config.local.yaml` as local file sources mounted at `/app/templates/` inside the container.
 
 Both templates use the same multi-environment GitOps skeleton (like `python-app4`) and produce the same four workflow files, Helm chart layout, ArgoCD app auto-creation, and `setup.sh` bootstrap. The difference is in the Python application itself.
+
+**Scaffolder constraints:** Component name must match `^([a-zA-Z][a-zA-Z0-9]*)(-[a-zA-Z0-9]+)*$` with a **30-character maximum**. The cap exists because the ARC runner pod name is `<name>-self-hosted-runner-<rs-hash>-<pod-hash>`, which must stay within the 63-char DNS label limit.
+
+**Nunjucks limitation in skeleton files:** Backstage's `fetch:template` action processes skeleton files with Nunjucks. Bash's array-length syntax `${#array[@]}` contains `{#` which Nunjucks parses as a comment opener and fails with "expected end of comment". Workaround: use a boolean flag variable instead of array length checks inside skeleton shell scripts.
 
 #### python-app — Single-version microservice
 
@@ -261,6 +275,8 @@ The custom Backstage image (`backstage-app/Dockerfile`) uses Node 24 + Python3 +
 ### Binary Mirror Workflow
 
 `mirror-cli-binaries.yaml` (exists in both `.github/workflows/` and `python-app4/.github/workflows/`) mirrors ArgoCD, yq, and kubectl binaries to Docker Hub (`christseng89/{argocd,yq,kubectl}-bin`) for fast in-cluster pulls. The CD jobs cache these binaries at `/tmp/{argocd,yq,kubectl}` keyed by version + arch.
+
+The workflow accepts three optional `workflow_dispatch` inputs (`argocd_version`, `yq_version`, `kubectl_version`). If an input is provided, the workflow calls `gh variable set` after mirroring to update the repo variable — so the mirror and the pinned version stay in sync automatically.
 
 ## Key Configuration
 
