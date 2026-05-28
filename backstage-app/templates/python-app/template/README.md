@@ -26,7 +26,6 @@ christseng89/${{values.app_name}}/
 ├── catalog-info.yaml                         ← Backstage component registration
 ├── runnerdeployment.yaml                     ← ARC self-hosted runner spec
 ├── setup.sh                                  ← bootstrap: secrets/variables set per-repository
-├── setup-org.sh                              ← bootstrap: secrets/variables set at org level (shared)
 └── mkdocs.yaml + docs/                       ← TechDocs source
 ```
 
@@ -43,7 +42,7 @@ cd ${{values.app_name}}
 
 ### 2. Create `.env`
 
-Both setup scripts source this file before doing anything. Create it in the repo root:
+`setup.sh` sources this file before doing anything. Create it in the repo root:
 
 ```bash
 cat > .env <<'EOF'
@@ -62,34 +61,18 @@ EOF
 
 > `.env` is git-ignored — never commit it.
 
-### 3. Choose and run a setup script
-
-Two scripts are provided. Pick the one that matches your GitHub setup:
-
-| | `setup.sh` | `setup-org.sh` |
-|---|---|---|
-| **Secrets/variables scope** | This repository only | `intelligent-ltd` org (all repos inherit) |
-| **When to use** | Standalone repo or personal account | Multiple scaffolded repos sharing the same credentials |
-| **gh token scope needed** | `repo` | `repo` + `admin:org` |
-| **Idempotent on re-run** | Overwrites existing values | Skips any secret/variable already present in the org |
-
-**Option A — per-repository (setup.sh)**
+### 3. Run setup.sh
 
 ```bash
 gh auth login          # one-time, if not already authenticated
 bash setup.sh          # runs all steps and triggers the first CI/CD pipeline
 ```
 
-**Option B — org-level (setup-org.sh)**
+`setup.sh` sets the 4 secrets and 3 variables directly on this repo
+(`christseng89/${{values.app_name}}`), then continues with the rest of the
+bootstrap. Re-runs overwrite any existing values.
 
-Your `gh` token must have the `admin:org` scope. If needed, refresh it first:
-
-```bash
-gh auth refresh -s admin:org
-bash setup-org.sh      # sets secrets/variables in intelligent-ltd org, then triggers pipeline
-```
-
-Common flags (work with either script):
+Available flags:
 
 ```bash
 bash setup.sh --skip-mirror               # skip mirroring if Docker Hub images already exist
@@ -97,16 +80,27 @@ bash setup.sh --skip-cicd                 # skip triggering the first pipeline r
 bash setup.sh --skip-mirror --skip-cicd
 ```
 
-### 4. Add Windows hosts entry (manual — requires Administrator)
+> **Org-level alternative:** the root of the `MasterBackstageIdp` repo ships a
+> `setup-org.sh` that can place the same secrets/variables on the
+> `intelligent-ltd` org so every scaffolded repo inherits them. It is **not**
+> wired into this template's current workflow — see
+> `README-Recap4GithubOrg.md` in that repo for the full file-change list
+> required to switch over.
 
-The setup scripts detect whether Git Bash is running as Administrator. If not, they print the
-command but cannot write the hosts file automatically. Open **PowerShell as Administrator** and run:
+### 4. Add Windows hosts entries (manual — requires Administrator)
+
+`setup.sh` writes three entries — one per environment — so later promotions
+to staging/prod don't need additional hosts edits. If Git Bash is **not**
+running as Administrator the script prints the commands and exits.
+Open **PowerShell as Administrator** and run:
 
 ```powershell
 Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 ${{values.app_name}}-dev.test.com"
+Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 ${{values.app_name}}-staging.test.com"
+Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 ${{values.app_name}}-prod.test.com"
 ```
 
-> Skip if the entry already exists.
+> Each line is checked independently — entries that already exist are skipped.
 
 ### 5. Verify
 
@@ -189,10 +183,10 @@ prod-cd.yaml triggers automatically
 
 ---
 
-## Appendix: What the Setup Scripts Do
+## Appendix: What `setup.sh` Does
 
-Both scripts run the same six steps in order. Steps 2 and 3 differ between the two.
-The flags `--skip-mirror` and `--skip-cicd` skip steps 4 and 6 respectively.
+`setup.sh` runs six steps in order. `--skip-mirror` skips step 4 and
+`--skip-cicd` skips step 6.
 
 ### Step 1 — Register the Self-Hosted Runner
 
@@ -212,8 +206,6 @@ safe to re-run when bootstrapping additional apps from this template.
 
 ### Step 2 — Set GitHub Actions Secrets
 
-**`setup.sh` — per-repository**
-
 Sets four secrets directly on this repo:
 
 ```bash
@@ -223,22 +215,6 @@ gh secret set ARGOCD_PASSWORD    --body "$ARGOCD_PASSWORD"    --repo christseng8
 gh secret set GH_PAT             --body "$GITHUB_PAT"         --repo christseng89/${{values.app_name}}
 ```
 
-**`setup-org.sh` — org-level**
-
-Checks each secret in the `intelligent-ltd` org first; only sets it if absent:
-
-```bash
-# for each of: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, ARGOCD_PASSWORD, GH_PAT
-if <secret already exists in org>; then
-  echo "$name already exists in org — skipping."
-else
-  gh secret set "$name" --body "..." --org intelligent-ltd --visibility all
-fi
-```
-
-All repos in the org inherit org-level secrets automatically — no per-repo configuration needed
-for subsequent scaffolded apps.
-
 `GH_PAT` (from `GITHUB_PAT`) is used by the CD jobs to register this repo in ArgoCD
 via `argocd repo add`. Create one at GitHub → Settings → Developer settings →
 Personal access tokens with **`repo`** scope.
@@ -247,27 +223,12 @@ Personal access tokens with **`repo`** scope.
 
 ### Step 3 — Set GitHub Actions Variables
 
-**`setup.sh` — per-repository**
-
 Sets three tool-version variables on this repo:
 
 ```bash
 gh variable set ARGOCD_VERSION  --body "$ARGOCD_VERSION"  --repo christseng89/${{values.app_name}}
 gh variable set YQ_VERSION      --body "$YQ_VERSION"       --repo christseng89/${{values.app_name}}
 gh variable set KUBECTL_VERSION --body "$KUBECTL_VERSION"  --repo christseng89/${{values.app_name}}
-```
-
-**`setup-org.sh` — org-level**
-
-Checks each variable in the `intelligent-ltd` org first; only sets it if absent:
-
-```bash
-# for each of: ARGOCD_VERSION, YQ_VERSION, KUBECTL_VERSION
-if <variable already exists in org>; then
-  echo "$name already exists in org — skipping."
-else
-  gh variable set "$name" --body "..." --org intelligent-ltd --visibility all
-fi
 ```
 
 Defaults (`v3.4.2` / `v4.44.3` / `v1.36.1`) are used unless overridden in `.env`.
@@ -286,16 +247,22 @@ Skip with `--skip-mirror` if the mirrors already exist at the configured version
 
 ---
 
-### Step 5 — Add Windows Hosts Entry
+### Step 5 — Add Windows Hosts Entries
 
-Checks whether Git Bash is running as Administrator. If yes, writes the entry directly:
+Checks whether Git Bash is running as Administrator. If yes, writes one
+entry per environment (each line is checked independently so re-runs are
+idempotent):
 
 ```
 127.0.0.1 ${{values.app_name}}-dev.test.com
+127.0.0.1 ${{values.app_name}}-staging.test.com
+127.0.0.1 ${{values.app_name}}-prod.test.com
 ```
 
-If not running as Administrator, prints the PowerShell command to run manually (see
+If not running as Administrator, prints the PowerShell commands to run manually (see
 Admin Setup step 4 above) and exits with an error so the issue is not silently skipped.
+Pre-seeding all three environments means promotions to staging/prod won't need
+another hosts edit later.
 
 ---
 

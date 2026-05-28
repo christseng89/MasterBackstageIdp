@@ -129,13 +129,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5 — Add Windows hosts entry (Git Bash, must be Run as Administrator)
+# Step 5 — Add Windows hosts entries (Git Bash, must be Run as Administrator)
 # ---------------------------------------------------------------------------
+# Writes one entry per environment (dev/staging/prod) so subsequent
+# promotions don't need a manual hosts edit each time.
 echo ""
-echo "=== Step 5: Add Windows hosts entry ==="
+echo "=== Step 5: Add Windows hosts entries (dev / staging / prod) ==="
 
 HOSTS=/c/Windows/System32/drivers/etc/hosts
-HOST_ENTRY="127.0.0.1 ${{values.app_name}}-dev.test.com"
+HOST_NAMES=(
+  "${{values.app_name}}-dev.test.com"
+  "${{values.app_name}}-staging.test.com"
+  "${{values.app_name}}-prod.test.com"
+)
 
 # Verify Git Bash is running elevated
 if ! net session >/dev/null 2>&1; then
@@ -143,16 +149,20 @@ if ! net session >/dev/null 2>&1; then
   echo "   Right-click Git Bash → 'Run as administrator', then re-run this script."
   echo ""
   echo "   Or, from an Administrator PowerShell, run:"
-  echo "     Add-Content -Path 'C:\\Windows\\System32\\drivers\\etc\\hosts' -Value '$HOST_ENTRY'"
+  for name in "${HOST_NAMES[@]}"; do
+    echo "     Add-Content -Path 'C:\\Windows\\System32\\drivers\\etc\\hosts' -Value '127.0.0.1 $name'"
+  done
   exit 1
 fi
 
-if grep -q "${{values.app_name}}-dev.test.com" "$HOSTS"; then
-  echo "✓ Already present, skipping."
-else
-  echo "$HOST_ENTRY" >> "$HOSTS"
-  echo "✓ Added ${{values.app_name}}-dev.test.com to hosts."
-fi
+for name in "${HOST_NAMES[@]}"; do
+  if grep -q "$name" "$HOSTS"; then
+    echo "✓ $name already present, skipping."
+  else
+    echo "127.0.0.1 $name" >> "$HOSTS"
+    echo "✓ Added $name to hosts."
+  fi
+done
 
 echo ""
 
