@@ -1,0 +1,111 @@
+# ============================================================================
+# ARC GitHub Webhook Server — STANDALONE manifest
+# ============================================================================
+# This deploys the webhook server that receives `workflow_job` events from
+# GitHub and pushes scale-up triggers to HorizontalRunnerAutoscaler.  Without
+# it, HRA's scaleUpTriggers never fires and runners never scale beyond
+# minReplicas.
+#
+# Two installation paths:
+#
+# Run this to decide which path you're on:
+#       helm list -A | grep actions-runner-controller
+#
+#   PREFERRED  ──  Output shows "actions-runner-controller ... deployed":
+#                  ARC is Helm-managed.  DO NOT `kubectl apply` this file —
+#                  it would create a second Deployment fighting Helm's.
+#                  Use Path A in README.md instead:
+#                       helm upgrade ... --set githubWebhookServer.enabled=true
+#
+#   FALLBACK   ──  Output is empty:
+#                  ARC was installed via raw kubectl manifests.  Apply this
+#                  file (after creating the webhook secret — see Prerequisites
+#                  below):
+#                       kubectl apply -f github-org-runner/webhook-server.yaml
+#
+# This repo's current cluster is Helm-managed
+# (actions-runner-controller-0.23.7 / app v0.27.6) → Path A applies, so do
+# NOT apply this file in this environment.
+#
+# Prerequisites:
+#   • ARC controller already running in `actions-runner-system`.
+#   • A webhook secret (any random 32+ char string) shared between this
+#     manifest and the GitHub webhook config.  Generate one:
+#         openssl rand -hex 32
+#     Then create the secret BEFORE applying this file:
+#         kubectl -n actions-runner-system create secret generic \
+#           github-webhook-server \
+#           --from-literal=github_webhook_secret_token=<the-32-byte-hex>
+#
+# Exposing to GitHub (Docker Desktop local):
+#   GitHub must reach this service over the public internet.  Two common
+#   ways from Docker Desktop:
+#     • ngrok tunnel:        ngrok http <port>
+#     • cloudflared tunnel:  cloudflared tunnel run
+#   See README.md "Expose the webhook" for both.
+# ============================================================================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-webhook-server
+  namespace: actions-runner-system
+  labels:
+    app.kubernetes.io/name: github-webhook-server
+    app.kubernetes.io/instance: actions-runner-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: github-webhook-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: github-webhook-server
+    spec:
+      serviceAccountName: actions-runner-controller   # Must already exist
+      containers:
+        - name: github-webhook-server
+          image: summerwind/actions-runner-controller:v0.27.6
+          args:
+            - github-webhook-server
+            - --port=8000
+            - --log-level=info
+          env:
+            - name: GITHUB_WEBHOOK_SECRET_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-webhook-server
+                  key: github_webhook_secret_token
+          ports:
+            - name: http
+              containerPort: 8000
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: github-webhook-server
+  namespace: actions-runner-system
+  labels:
+    app.kubernetes.io/name: github-webhook-server
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: github-webhook-server

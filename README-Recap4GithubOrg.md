@@ -196,8 +196,9 @@ template 的 CI/CD 流程變動。
 
 | 檔案 | 用途 |
 |---|---|
-| `github-org-runner/org-runner.yaml` | 一次 apply 三個資源:`ServiceAccount`、`RunnerDeployment`(`organization:` scope)、`HorizontalRunnerAutoscaler`(`minReplicas: 1` 永遠保留 1 顆 idle runner 讓 UI 可見;之後若有設 `workflow_job` webhook,可改回 0 走真正的 scale-to-zero) |
-| `github-org-runner/README.md` | 套用步驟、驗證指令、workflow 範例、teardown 步驟 |
+| `github-org-runner/org-runner.yaml` | 一次 apply 三個資源:`ServiceAccount`、`RunnerDeployment`(`organization:` scope)、`HorizontalRunnerAutoscaler`(`minReplicas: 1` / `maxReplicas: 5`) |
+| `github-org-runner/webhook-server.yaml` | **可選**。ARC webhook server 的 standalone Deployment + Service,讓 HRA 收到 `workflow_job` event 後真正 scale up 到 maxReplicas;只有非 Helm 安裝時需要 apply,Helm 用戶 `helm upgrade ... --set githubWebhookServer.enabled=true` 即可 |
+| `github-org-runner/README.md` | 套用步驟、驗證指令、workflow 範例、teardown 步驟、webhook server + ngrok / cloudflared 完整設定 |
 
 ### 5.3 前置 — PAT scope 必須含 `admin:org`
 
@@ -270,3 +271,30 @@ kubectl delete -f github-org-runner/org-runner.yaml
 如果剛剛只是為了測試 org runner 才升級 PAT 加 `admin:org` scope,測完想收回權限,
 回到 <https://github.com/settings/tokens> 點該 PAT、取消勾 `admin:org`、Update token
 即可。PAT 字串照樣不變,per-repo runner 的 `repo`+`workflow` 權限不會受影響。
+
+### 5.7 進階:開啟 webhook server,讓 maxReplicas 真正生效
+
+預設情況下 `org-runner.yaml` 內的 HRA 雖然有 `scaleUpTriggers`、`maxReplicas: 5`,
+但**沒設 webhook 的話 ARC 收不到 `workflow_job` event**,池子永遠卡在 `minReplicas`
+那一顆,其他 jobs 在 GitHub queue 等待。
+
+> **本 repo 目前的 cluster 是 Helm 安裝**(`actions-runner-controller-0.23.7` /
+> app v0.27.6 — 用 `helm list -A | grep actions-runner-controller` 驗證得到),
+> 所以走下面 4 步驟時 **絕對不要 `kubectl apply -f github-org-runner/webhook-server.yaml`** —
+> Helm 已經管理同一份 Deployment,再 apply 會撞起來。改用 `helm upgrade ... --set
+> githubWebhookServer.enabled=true` 一行啟用即可,完整指令(含 `--version 0.23.7`
+> 鎖版本)寫在 sub-folder README 的 Path A 段落。
+> `webhook-server.yaml` 只是備用,留給未來「ARC 改用 raw kubectl manifest 重裝」
+> 的情境參考。
+
+對 Docker Desktop 本地測試夠用,但要驗證 maxReplicas 真的 work 就需要四步:
+
+1. **裝 webhook server**(本環境:Helm 一行 upgrade。非 Helm 環境才 apply `webhook-server.yaml`)
+2. **產 webhook secret** + 建 K8s secret(Helm `--set` 一併處理)
+3. **用 ngrok / cloudflared 把本地 webhook 暴露給 GitHub**
+4. **GitHub org settings → Webhooks → Add webhook** 設好 payload URL / secret / 勾 `Workflow jobs` event
+
+完整步驟、指令、所有平台對應(含 GitHub UI 截圖必填欄)寫在
+[`github-org-runner/README.md` → "Optional: enable webhook server"](./github-org-runner/README.md)
+章節,這裡不重複貼。Webhook 啟用後可以把 `org-runner.yaml` 的 `minReplicas` 改回 `0`,
+走真正的 scale-to-zero 省資源。

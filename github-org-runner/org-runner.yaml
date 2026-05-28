@@ -53,7 +53,7 @@ spec:
         - org-runner            # workflows use: runs-on: [self-hosted, org-runner]
       serviceAccountName: intelligent-ltd-self-hosted-runner
 ---
-# Horizontal autoscaler — scale 0..3 based on queued workflow jobs.
+# Horizontal autoscaler — scale 0..5 based on queued workflow jobs.
 # Without this, replicas stays fixed at the value above.
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: HorizontalRunnerAutoscaler
@@ -69,7 +69,7 @@ spec:
   # trigger scale-up.  In a real cluster with workflow_job webhooks delivered
   # to ARC, you can flip minReplicas back to 0 for true scale-to-zero.
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   scaleUpTriggers:
     - githubEvent:
         workflowJob: {}        # ARC listens to workflow_job webhook (if configured)
