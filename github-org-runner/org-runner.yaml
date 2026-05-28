@@ -1,0 +1,76 @@
+# ============================================================================
+# Org-level self-hosted runner for the `intelligent-ltd` GitHub organization
+# ============================================================================
+# Purpose: lets ANY repository owned by `intelligent-ltd` route workflow jobs
+# to this shared runner pool by writing `runs-on: [self-hosted, org-runner]`.
+#
+# Scope:   TESTING / EXPLORATION ONLY.
+#          Per-repo runners scaffolded by the Backstage `python-app` and
+#          `python-app-multi-apis` templates are NOT affected — they keep
+#          using their own `RunnerDeployment` with `repository:` field.
+#
+# Pre-reqs:
+#   • ARC controller (actions.summerwind.dev/v1alpha1) installed in
+#     `actions-runner-system` namespace — already present in your cluster.
+#   • The PAT stored in `actions-runner-system/controller-manager` secret
+#     under `github_token` MUST include `admin:org` scope.  If your current
+#     PAT only has `repo`+`workflow`, regenerate one with `admin:org` added
+#     and re-create the secret before applying this file:
+#
+#       NEW_PAT="ghp_xxxxxxxxxxxxxxxxxxxx"
+#       kubectl -n actions-runner-system create secret generic controller-manager \
+#         --from-literal=github_token="$NEW_PAT" \
+#         --dry-run=client -o yaml | kubectl apply -f -
+#       kubectl -n actions-runner-system rollout restart deployment
+#
+# Apply:
+#       kubectl apply -f github-org-runner/org-runner.yaml
+#
+# Verify:
+#       kubectl get pods -n github-runners -l runner-deployment-name=intelligent-ltd-self-hosted-runner
+#       gh api /orgs/intelligent-ltd/actions/runners --jq '.runners[]'
+# ============================================================================
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: intelligent-ltd-self-hosted-runner
+  namespace: github-runners
+---
+# Org-scope RunnerDeployment — note `organization:` (NOT `repository:`)
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: intelligent-ltd-self-hosted-runner
+  namespace: github-runners
+spec:
+  replicas: 1                  # Start small; HRA below will scale up on demand
+  template:
+    spec:
+      organization: intelligent-ltd
+      dockerEnabled: true
+      labels:
+        - org-runner            # workflows use: runs-on: [self-hosted, org-runner]
+      serviceAccountName: intelligent-ltd-self-hosted-runner
+---
+# Horizontal autoscaler — scale 0..3 based on queued workflow jobs.
+# Without this, replicas stays fixed at the value above.
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: HorizontalRunnerAutoscaler
+metadata:
+  name: intelligent-ltd-self-hosted-runner
+  namespace: github-runners
+spec:
+  scaleTargetRef:
+    kind: RunnerDeployment
+    name: intelligent-ltd-self-hosted-runner
+  # Testing-friendly defaults — keep 1 idle runner always registered so it's
+  # visible in the GitHub org UI without needing a webhook + queued job to
+  # trigger scale-up.  In a real cluster with workflow_job webhooks delivered
+  # to ARC, you can flip minReplicas back to 0 for true scale-to-zero.
+  minReplicas: 1
+  maxReplicas: 3
+  scaleUpTriggers:
+    - githubEvent:
+        workflowJob: {}        # ARC listens to workflow_job webhook (if configured)
+      duration: "30m"          # Keep replica warm for 30 min after burst

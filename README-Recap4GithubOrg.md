@@ -1,11 +1,16 @@
 # Setup Github Organization (參考用)
 
-> **目前實際採用的路線:per-repo secrets/variables**
+> **目前實際採用的路線:per-repo secrets/variables + per-repo runner**
 >
 > Scaffolded repo 仍建立在個人帳號 `christseng89/<app>` 底下,每個 repo 自己
-> 透過 `backstage-app/templates/python-app/template/setup.sh` 設定 4 個 secrets
-> 與 3 個 variables。本文件保留 org-level 的做法作為**未來參考**,並列出真要切到
-> org 模式時必須連帶修改的所有檔案。
+> 透過 `backstage-app/templates/python-app/template/setup.sh` 設定 4 個 secrets、
+> 3 個 variables,以及自己的 per-repo ARC `RunnerDeployment`(`spec.template.spec.repository`)。
+> 本文件保留 org-level 的做法作為**未來參考**,並列出真要切到 org 模式時必須連帶
+> 修改的所有檔案。
+>
+> 另外 root folder 多了一個 [`github-org-runner/`](./github-org-runner/) 資料夾,
+> 提供 **org-level self-hosted runner** 的測試用 YAML — 不影響任何 template,可獨立
+> 套用驗證 org runner 是否能跑起來,詳見本文 §5。
 
 ---
 
@@ -164,3 +169,104 @@ GitHub 的 secret/variable 範圍**嚴格按 owner namespace 切分**:`christsen
 
 在那之前,本 repo 仍維持 per-repo 設定,新 scaffold 的 repo 每次都跑
 template 的 `setup.sh` 把 secrets/variables 設在自己的 repo 上即可。
+
+---
+
+## 5. Org-level self-hosted runner(獨立測試,不影響 templates)
+
+Root folder 提供 [`github-org-runner/`](./github-org-runner/) 一份完整 YAML,
+讓你可以在不動到任何 template 的前提下,在 `intelligent-ltd` org 註冊一組**共用的**
+ARC self-hosted runner,**驗證 org-level runner 是否能正常運作**。
+
+### 5.1 為什麼分開放,不直接改 templates?
+
+| | per-repo runner(現狀) | org-level runner(本資料夾) |
+|---|---|---|
+| 註冊範圍 | `repository: christseng89/<app>` | `organization: intelligent-ltd` |
+| 由哪個檔案建立 | scaffolded repo 的 `runnerdeployment.yaml`(由 setup.sh 套用) | `github-org-runner/org-runner.yaml`(手動 `kubectl apply`) |
+| Workflow `runs-on:` | `self-hosted`(預設行為,匹配同一 repo 的 per-repo runner) | `[self-hosted, org-runner]`(用自訂 label 顯式選 org runner) |
+| 影響範圍 | 只該 repo 的 workflow 用得到 | org 內任何 repo 都能用 |
+| 何時用 | 預設;每個 scaffolded repo 自動有 | 測試 / 多個 repo 想共用一組 runner pool 時 |
+
+**兩者可以同時存在** — workflow 寫 `runs-on: self-hosted` 還是會匹配到 per-repo runner;
+要打到 org runner 必須明寫 `[self-hosted, org-runner]`。所以加 org runner **不會**讓現有
+template 的 CI/CD 流程變動。
+
+### 5.2 內含什麼
+
+| 檔案 | 用途 |
+|---|---|
+| `github-org-runner/org-runner.yaml` | 一次 apply 三個資源:`ServiceAccount`、`RunnerDeployment`(`organization:` scope)、`HorizontalRunnerAutoscaler`(`minReplicas: 1` 永遠保留 1 顆 idle runner 讓 UI 可見;之後若有設 `workflow_job` webhook,可改回 0 走真正的 scale-to-zero) |
+| `github-org-runner/README.md` | 套用步驟、驗證指令、workflow 範例、teardown 步驟 |
+
+### 5.3 前置 — PAT scope 必須含 `admin:org`
+
+ARC controller 用的 PAT 預設只有 `repo`+`workflow` scope(夠 repo-level runner 註冊用),
+但 org-level runner 需要 `admin:org` 才能呼叫 `POST /orgs/<org>/actions/runners/registration-token`。
+沒升級就 apply,RunnerDeployment 會卡在 `DESIRED=1, AVAILABLE=0` 永遠拉不出 pod。
+
+**最簡單做法:直接擴充既有 PAT 的 scope,不用換 token 字串**
+
+```
+1. 開 https://github.com/settings/tokens
+2. 點 ARC controller 現在用的那顆 PAT
+3. 中段 scope 清單,勾上 admin:org(會自動含 write:org / read:org / manage_runners:org)
+4. 頁面最下方按 Update token
+```
+
+PAT 字串完全不變 → K8s secret 不用碰 → 只要重啟 controller 讓它立刻重試即可:
+
+```bash
+kubectl -n actions-runner-system rollout restart deployment
+kubectl -n actions-runner-system rollout status deployment
+```
+
+> 只有當 PAT 已過期或被 revoke 時才需要產新 token + 重灌 secret。完整指令仍寫在
+> `github-org-runner/README.md` 的 Prerequisites 章節。
+
+### 5.4 套用 + 驗證
+
+```bash
+# 套用
+kubectl apply -f github-org-runner/org-runner.yaml
+
+# 確認 RunnerDeployment AVAILABLE=1 + pod 跑起來
+kubectl get runnerdeployment,pod -n github-runners | grep intelligent-ltd
+
+# Runner log 看到 "Listening for Jobs"
+POD=$(kubectl get pods -n github-runners --no-headers | grep '^intelligent-ltd-' | awk '{print $1}' | head -1)
+kubectl logs -n github-runners "$POD" -c runner --tail=30 \
+  | grep -iE 'gitHubUrl|organization|Connected|Listening'
+
+# GitHub API 確認(Git Bash 開頭不能帶斜線 — MSYS 會把它當路徑改寫)
+gh api orgs/intelligent-ltd/actions/runners \
+  --jq '.runners[] | {name, status, labels: [.labels[].name]}'
+
+# UI:https://github.com/organizations/intelligent-ltd/settings/actions/runners
+```
+
+### 5.5 怎麼從 workflow 用它
+
+在 `intelligent-ltd` 底下任一個 repo 加一個 job:
+
+```yaml
+jobs:
+  test-org-runner:
+    runs-on: [self-hosted, org-runner]
+    steps:
+      - run: |
+          echo "Running on $(hostname) — org-level runner"
+```
+
+注意:**只有顯式寫 `org-runner` label 才會路由到這顆**,所以不用擔心既有 workflow
+(只寫 `runs-on: self-hosted` 的)被搶走 — 那些仍會匹配同一 repo 的 per-repo runner。
+
+### 5.6 完成測試後拆掉
+
+```bash
+kubectl delete -f github-org-runner/org-runner.yaml
+```
+
+如果剛剛只是為了測試 org runner 才升級 PAT 加 `admin:org` scope,測完想收回權限,
+回到 <https://github.com/settings/tokens> 點該 PAT、取消勾 `admin:org`、Update token
+即可。PAT 字串照樣不變,per-repo runner 的 `repo`+`workflow` 權限不會受影響。
