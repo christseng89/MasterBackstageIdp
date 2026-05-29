@@ -3,22 +3,29 @@ commonLabels:
 replicaCount: 1
 
 # ---------------------------------------------------------------------------
-# Multi-API-version metadata
+# Multi-API-version metadata (env-driven routing)
 # ---------------------------------------------------------------------------
-# `apiVersions.default` is the version the container reports via the
-# `DEFAULT_API_VERSION` env (read by /version endpoint) AND the value written
-# to the `app.kubernetes.io/version` label so the Backstage K8s plugin shows
-# it. `apiVersions.supported` / `deprecated` are advertised on /version too.
+# `apiVersions.*` controls which versions the running container exposes.
+# Same image across dev/staging/prod — only this block differs per env.
 #
-# Override per environment in values-{dev,staging,prod}.yaml.
+#   enabled    — comma-list registered as normal routes
+#   deprecated — subset of enabled; responses also get RFC 9745/8594 headers
+#   removed    — versions that USED to exist; return 410 Gone with successor link
+#   default    — primary version, used for app.kubernetes.io/version label
+#                and DEFAULT_API_VERSION env (read by /version endpoint)
+#
+# Anything not in any of the three lists is simply not registered → vanilla 404
+# (use this for versions "not yet deployed in this env", e.g. v5/v6 on prod).
+#
+# Override per env in values-{dev,staging,prod}.yaml.
 apiVersions:
-  default: v2
-  supported: "v1,v2,v3"
-  deprecated: "v1"
+  enabled: "v3,v4"          # base default — most envs override this
+  deprecated: ""
+  removed: ""
+  default: v4
 
 # `git.sha` lets workflows inject the actual commit SHA into the running pod
-# (visible via /version + /api/v3/env). When unset, image.tag is used as a
-# best-effort fallback.
+# (visible via /version + /api/v4/metrics).  Falls back to image.tag when unset.
 git:
   sha: ""
 
@@ -26,7 +33,7 @@ image:
   repository: christseng89/${{values.app_name}}
   pullPolicy: IfNotPresent
   # Placeholder — overridden by values-dev/staging/prod.yaml in the GitOps flow.
-  tag: v2
+  tag: v4
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -59,15 +66,15 @@ resources:
   limits:
     cpu: 200m
     memory: 200M
-# Health probes hit v2 (production default). When v1 is fully retired the path
-# stays the same; when v3 is promoted to production, bump these to /api/v3/healthz.
+# Health probes hit the env's default API version's /healthz.  Each env's
+# values-*.yaml overrides this if the default differs.
 livenessProbe:
   httpGet:
-    path: /api/v2/healthz
+    path: /api/v4/healthz
     port: http
 readinessProbe:
   httpGet:
-    path: /api/v2/healthz
+    path: /api/v4/healthz
     port: http
 autoscaling:
   enabled: false

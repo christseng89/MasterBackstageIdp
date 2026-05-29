@@ -1,11 +1,14 @@
 replicaCount: 3
 
-# Prod stays on v2 (production lifecycle). v3 only ships to prod after it
-# has been promoted to `lifecycle: production` in catalog-info.yaml.
+# Prod — current production surface: v2 (deprecated, sunsetting), v3 + v4 stable.
+# v5/v6 not deployed here yet (clients calling them get vanilla 404).
+# v1 stays in REMOVED so legacy clients get a 410 with migration pointer
+# instead of a confusing 404.
 apiVersions:
-  default: v2
-  supported: "v1,v2,v3"
-  deprecated: "v1"
+  enabled: "v2,v3,v4"
+  deprecated: "v2"
+  removed: "v1"
+  default: v4
 
 image:
   tag: ""

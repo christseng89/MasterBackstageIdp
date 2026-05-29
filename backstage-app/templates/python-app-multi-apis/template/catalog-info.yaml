@@ -3,8 +3,19 @@ kind: Component
 metadata:
   name: ${{ values.app_name }}
   description: |
-    Python multi-API-version Flask service — one image simultaneously serves
-    /api/v1 (deprecated), /api/v2 (production), /api/v3 (experimental).
+    Python multi-API-version Flask service — same image, env-driven routing.
+    Six versions live in the codebase; each environment exposes a different
+    subset via ENABLED_VERSIONS, with phase-out controlled by DEPRECATED /
+    REMOVED env vars.
+
+        env  | v1      | v2          | v3      | v4    | v5    | v6
+        -----+---------+-------------+---------+-------+-------+-----------
+        dev  | removed | removed     | removed | stable| stable| stable
+        stg  | removed | removed     | stable  | stable| stable| stable
+        prd  | removed | deprecated  | stable  | stable| n/a   | n/a
+
+    "removed" = HTTP 410 Gone with successor + Sunset header.
+    "n/a"     = not registered in this env → vanilla 404.
   annotations:
     github.com/project-slug: christseng89/${{ values.app_name }}
     backstage.io/kubernetes-id: ${{ values.app_name }}
@@ -19,10 +30,10 @@ metadata:
       title: Greeting (dev)
       icon: web
     - url: http://${{ values.app_name }}-dev.test.com:9080/version
-      title: /version metadata
+      title: /version (per-env enabled/deprecated/removed)
       icon: dashboard
-    - url: http://${{ values.app_name }}-dev.test.com:9080/api/v2/info
-      title: /api/v2/info (production default)
+    - url: http://${{ values.app_name }}-prod.test.com:9080/api/v4/info
+      title: /api/v4/info (prod default)
       icon: dashboard
 spec:
   type: service
@@ -32,24 +43,22 @@ spec:
     - ${{ values.app_name }}-api-v1
     - ${{ values.app_name }}-api-v2
     - ${{ values.app_name }}-api-v3
+    - ${{ values.app_name }}-api-v4
+    - ${{ values.app_name }}-api-v5
+    - ${{ values.app_name }}-api-v6
 ---
 # -----------------------------------------------------------------------------
-# API v1 — DEPRECATED (sunset 2025-12-31). Clients should migrate to v2.
+# API v1 — DEPRECATED (already retired everywhere — 410 Gone in all envs).
 # -----------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: ${{ values.app_name }}-api-v1
-  description: REST API v1 (3 endpoints) — DEPRECATED, sunset 2025-12-31. Migrate to v2.
-  tags:
-    - rest
-    - python
-    - flask
-    - v1
-    - deprecated
+  description: REST API v1 — RETIRED. Now returns 410 Gone in every env. Successor v2.
+  tags: [rest, python, flask, v1, deprecated, retired]
   links:
-    - url: http://${{ values.app_name }}-dev.test.com:9080/api/v1/info
-      title: Live /api/v1/info (returns Deprecation + Sunset headers)
+    - url: http://${{ values.app_name }}-prod.test.com:9080/api/v1/info
+      title: Live /api/v1/info (returns 410 Gone)
 spec:
   type: openapi
   lifecycle: deprecated
@@ -59,77 +68,78 @@ spec:
     info:
       title: ${{ values.app_name }} API v1
       description: |
-        **DEPRECATED** — sunset 2025-12-31.
-        Migrate to v2; see `/docs/migration-v1-to-v2`.
-        Every response on this version includes:
-          • Deprecation: true
-          • Sunset: Wed, 31 Dec 2025 23:59:59 GMT
-          • Link: </api/v2>; rel="successor-version"
+        **RETIRED** on 2024-12-31. All paths return HTTP 410 Gone with successor link.
+
+        | Env     | Status         |
+        |---------|----------------|
+        | dev     | 410 Gone (removed) |
+        | staging | 410 Gone (removed) |
+        | prod    | 410 Gone (removed) |
+
+        Successor: v2 → migration guide `/docs/migration-v1-to-v2`.
       version: 1.0.0
-    servers:
-      - url: http://${{ values.app_name }}-dev.test.com:9080
-        description: Dev environment via nginx ingress (port 9080)
     paths:
-      /api/v1/info:
-        get:
-          summary: Service info (deprecated)
-          deprecated: true
-          responses:
-            "200":
-              description: Info payload
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      time: { type: string }
-                      hostname: { type: string }
-                      api_version: { type: string, enum: ["v1"] }
-      /api/v1/healthz:
-        get:
-          summary: Liveness / readiness probe (deprecated)
-          deprecated: true
-          responses:
-            "200":
-              description: Healthy
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      status: { type: string }
-                      api_version: { type: string, enum: ["v1"] }
-      /api/v1/hostname:
-        get:
-          summary: Pod hostname (deprecated)
-          deprecated: true
-          responses:
-            "200":
-              description: Hostname
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      hostname: { type: string }
-                      api_version: { type: string, enum: ["v1"] }
+      /api/v1/info:     { get: { summary: Removed, deprecated: true, responses: { "410": { description: Gone } } } }
+      /api/v1/healthz:  { get: { summary: Removed, deprecated: true, responses: { "410": { description: Gone } } } }
+      /api/v1/hostname: { get: { summary: Removed, deprecated: true, responses: { "410": { description: Gone } } } }
 ---
 # -----------------------------------------------------------------------------
-# API v2 — PRODUCTION (default). Carries forward v1 endpoints + 2 new.
+# API v2 — DEPRECATED (prod only, sunsetting 2026-06-30. Already removed elsewhere.)
 # -----------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: ${{ values.app_name }}-api-v2
-  description: REST API v2 (5 endpoints) — production default.
-  tags:
-    - rest
-    - python
-    - flask
-    - v2
+  description: REST API v2 — DEPRECATED. Prod only; staging/dev already 410. Sunset 2026-06-30.
+  tags: [rest, python, flask, v2, deprecated]
   links:
-    - url: http://${{ values.app_name }}-dev.test.com:9080/api/v2/info
-      title: Live /api/v2/info
+    - url: http://${{ values.app_name }}-prod.test.com:9080/api/v2/info
+      title: Live /api/v2/info (prod, deprecated)
+spec:
+  type: openapi
+  lifecycle: deprecated
+  owner: development
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: ${{ values.app_name }} API v2
+      description: |
+        **DEPRECATED** — sunset 2026-06-30. Successor: v3.
+
+        | Env     | Status                                           |
+        |---------|--------------------------------------------------|
+        | dev     | 410 Gone (removed)                               |
+        | staging | 410 Gone (removed)                               |
+        | prod    | 200 OK + `Deprecation: true` + `Sunset` headers  |
+
+        Operations below are marked `deprecated: true` — Swagger UI grays them
+        out by design. They still respond on prod with normal 200 + the
+        deprecation/sunset headers from RFC 9745 / 8594.
+      version: 2.0.0
+    servers:
+      - url: http://${{ values.app_name }}-prod.test.com:9080
+        description: Prod (only env still serving v2)
+    paths:
+      /api/v2/info:     { get: { summary: Service info,    deprecated: true, responses: { "200": { description: OK } } } }
+      /api/v2/healthz:  { get: { summary: Health probe,    deprecated: true, responses: { "200": { description: OK } } } }
+      /api/v2/hostname: { get: { summary: Pod hostname,    deprecated: true, responses: { "200": { description: OK } } } }
+      /api/v2/echo:     { post: { summary: Echo body,      deprecated: true, responses: { "200": { description: OK } } } }
+      /api/v2/time:     { get: { summary: Current UTC,     deprecated: true, responses: { "200": { description: OK } } } }
+---
+# -----------------------------------------------------------------------------
+# API v3 — PRODUCTION (stable in prod + staging; dev already removed).
+# -----------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{ values.app_name }}-api-v3
+  description: REST API v3 — production stable in prod + staging. Removed in dev.
+  tags: [rest, python, flask, v3]
+  links:
+    - url: http://${{ values.app_name }}-staging.test.com:9080/api/v3/info
+      title: Live /api/v3/info (staging)
+    - url: http://${{ values.app_name }}-prod.test.com:9080/api/v3/info
+      title: Live /api/v3/info (prod)
 spec:
   type: openapi
   lifecycle: production
@@ -137,99 +147,133 @@ spec:
   definition: |
     openapi: 3.0.3
     info:
-      title: ${{ values.app_name }} API v2
-      description: Production API surface for ${{ values.app_name }}.
-      version: 2.0.0
+      title: ${{ values.app_name }} API v3
+      description: |
+        Production stable. Carry-over of v2's surface + `/random` / `/uptime` / `/env`.
+
+        | Env     | Status              |
+        |---------|---------------------|
+        | dev     | 410 Gone (removed)  |
+        | staging | 200 OK (stable)     |
+        | prod    | 200 OK (stable)     |
+
+        Dev migrated past v3 — clients still calling `/api/v3/*` against dev
+        will hit a 410 with successor pointing at v4.
+      version: 3.0.0
     servers:
-      - url: http://${{ values.app_name }}-dev.test.com:9080
-        description: Dev environment via nginx ingress (port 9080)
+      - url: http://${{ values.app_name }}-staging.test.com:9080
+      - url: http://${{ values.app_name }}-prod.test.com:9080
     paths:
-      /api/v2/info:
-        get:
-          summary: Service info
-          responses:
-            "200":
-              description: Info payload
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      time: { type: string }
-                      hostname: { type: string }
-                      deployed_on: { type: string }
-                      api_version: { type: string, enum: ["v2"] }
-      /api/v2/healthz:
-        get:
-          summary: Liveness / readiness probe
-          responses:
-            "200":
-              description: Healthy
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      status: { type: string, enum: ["ok"] }
-                      api_version: { type: string, enum: ["v2"] }
-      /api/v2/hostname:
-        get:
-          summary: Pod hostname
-          responses:
-            "200":
-              description: Hostname
-      /api/v2/echo:
-        post:
-          summary: Echo request body
-          description: Returns the JSON body submitted by the caller.
-          requestBody:
-            required: false
-            content:
-              application/json:
-                schema:
-                  type: object
-          responses:
-            "200":
-              description: Echoed payload
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      received: { type: object }
-                      api_version: { type: string, enum: ["v2"] }
-      /api/v2/time:
-        get:
-          summary: Current UTC time
-          description: Returns server-side time in ISO 8601 UTC format.
-          responses:
-            "200":
-              description: Current time
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      utc: { type: string, format: date-time }
-                      api_version: { type: string, enum: ["v2"] }
+      /api/v3/info:     { get: { summary: Service info, responses: { "200": { description: OK } } } }
+      /api/v3/healthz:  { get: { summary: Health probe, responses: { "200": { description: OK } } } }
+      /api/v3/hostname: { get: { summary: Pod hostname, responses: { "200": { description: OK } } } }
+      /api/v3/echo:     { post: { summary: Echo body,   responses: { "200": { description: OK } } } }
+      /api/v3/time:     { get: { summary: Current UTC,  responses: { "200": { description: OK } } } }
+      /api/v3/random:   { get: { summary: Random int,   responses: { "200": { description: OK } } } }
+      /api/v3/uptime:   { get: { summary: Uptime,       responses: { "200": { description: OK } } } }
+      /api/v3/env:      { get: { summary: Allowlisted env vars, responses: { "200": { description: OK } } } }
 ---
 # -----------------------------------------------------------------------------
-# API v3 — EXPERIMENTAL / PREVIEW. v2 endpoints + 3 new (random, uptime, env).
+# API v4 — PRODUCTION (default in all envs).
 # -----------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
-  name: ${{ values.app_name }}-api-v3
-  description: REST API v3 (8 endpoints) — experimental. May change before GA.
-  tags:
-    - rest
-    - python
-    - flask
-    - v3
-    - preview
+  name: ${{ values.app_name }}-api-v4
+  description: REST API v4 — production default everywhere (dev / staging / prod).
+  tags: [rest, python, flask, v4, default]
   links:
-    - url: http://${{ values.app_name }}-dev.test.com:9080/api/v3/info
-      title: Live /api/v3/info
+    - url: http://${{ values.app_name }}-prod.test.com:9080/api/v4/info
+      title: Live /api/v4/info (prod default)
+spec:
+  type: openapi
+  lifecycle: production
+  owner: development
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: ${{ values.app_name }} API v4
+      description: |
+        Production **default** in all environments. v3 carry-over + `/metrics`
+        (replaces v3's `/env` which exposed arbitrary env vars).
+
+        | Env     | Status                                  |
+        |---------|-----------------------------------------|
+        | dev     | 200 OK (stable)                         |
+        | staging | 200 OK (stable)                         |
+        | prod    | 200 OK (stable, `apiVersions.default`)  |
+      version: 4.0.0
+    servers:
+      - url: http://${{ values.app_name }}-dev.test.com:9080
+      - url: http://${{ values.app_name }}-staging.test.com:9080
+      - url: http://${{ values.app_name }}-prod.test.com:9080
+    paths:
+      /api/v4/info:     { get: { summary: Service info, responses: { "200": { description: OK } } } }
+      /api/v4/healthz:  { get: { summary: Health probe, responses: { "200": { description: OK } } } }
+      /api/v4/hostname: { get: { summary: Pod hostname, responses: { "200": { description: OK } } } }
+      /api/v4/echo:     { post: { summary: Echo body,   responses: { "200": { description: OK } } } }
+      /api/v4/time:     { get: { summary: Current UTC,  responses: { "200": { description: OK } } } }
+      /api/v4/random:   { get: { summary: Random int,   responses: { "200": { description: OK } } } }
+      /api/v4/uptime:   { get: { summary: Uptime,       responses: { "200": { description: OK } } } }
+      /api/v4/metrics:  { get: { summary: "Metrics snapshot (v4-only net-new)", responses: { "200": { description: OK } } } }
+---
+# -----------------------------------------------------------------------------
+# API v5 — PRODUCTION (in dev + staging; not yet rolled to prod).
+# -----------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{ values.app_name }}-api-v5
+  description: REST API v5 — production-quality; deployed in dev + staging; awaiting prod rollout.
+  tags: [rest, python, flask, v5]
+  links:
+    - url: http://${{ values.app_name }}-staging.test.com:9080/api/v5/info
+      title: Live /api/v5/info (staging)
+spec:
+  type: openapi
+  lifecycle: production
+  owner: development
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: ${{ values.app_name }} API v5
+      description: |
+        Production-quality contract. v4 carry-over + paginated `/list`.
+        Pending rollout to prod — `apiVersions.enabled` in `values-prod.yaml`
+        does not yet include `v5`, so prod returns vanilla 404 (not 410).
+
+        | Env     | Status                            |
+        |---------|-----------------------------------|
+        | dev     | 200 OK (stable)                   |
+        | staging | 200 OK (stable)                   |
+        | prod    | 404 (not deployed — rollout pending) |
+      version: 5.0.0
+    servers:
+      - url: http://${{ values.app_name }}-dev.test.com:9080
+      - url: http://${{ values.app_name }}-staging.test.com:9080
+    paths:
+      /api/v5/info:     { get: { summary: Service info, responses: { "200": { description: OK } } } }
+      /api/v5/healthz:  { get: { summary: Health probe, responses: { "200": { description: OK } } } }
+      /api/v5/hostname: { get: { summary: Pod hostname, responses: { "200": { description: OK } } } }
+      /api/v5/echo:     { post: { summary: Echo body,   responses: { "200": { description: OK } } } }
+      /api/v5/time:     { get: { summary: Current UTC,  responses: { "200": { description: OK } } } }
+      /api/v5/random:   { get: { summary: Random int,   responses: { "200": { description: OK } } } }
+      /api/v5/uptime:   { get: { summary: Uptime,       responses: { "200": { description: OK } } } }
+      /api/v5/metrics:  { get: { summary: Metrics snapshot, responses: { "200": { description: OK } } } }
+      /api/v5/list:     { get: { summary: "Paginated random list (v5-only net-new)", responses: { "200": { description: OK } } } }
+---
+# -----------------------------------------------------------------------------
+# API v6 — EXPERIMENTAL (dev + staging preview; never in prod yet).
+# -----------------------------------------------------------------------------
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{ values.app_name }}-api-v6
+  description: REST API v6 — experimental / preview. Available in dev + staging. Prod 404.
+  tags: [rest, python, flask, v6, preview]
+  links:
+    - url: http://${{ values.app_name }}-dev.test.com:9080/api/v6/info
+      title: Live /api/v6/info (dev)
 spec:
   type: openapi
   lifecycle: experimental
@@ -237,88 +281,32 @@ spec:
   definition: |
     openapi: 3.0.3
     info:
-      title: ${{ values.app_name }} API v3
+      title: ${{ values.app_name }} API v6
       description: |
-        Preview API. May change before promotion to production.
-        Carries forward all v2 endpoints (same response shape, only the
-        api_version field differs) and adds 3 new endpoints below.
-      version: 3.0.0
+        **Preview / experimental** API. Schema may change before GA promotion.
+        v5 carry-over + Server-Sent Events `/events` (subject to redesign).
+
+        | Env     | Status                            |
+        |---------|-----------------------------------|
+        | dev     | 200 OK (preview)                  |
+        | staging | 200 OK (preview)                  |
+        | prod    | 404 (not deployed)                |
+
+        Clients integrating against v6 should pin a specific image tag and
+        expect breaking changes until the entity's lifecycle flips to
+        `production`.
+      version: 6.0.0
     servers:
       - url: http://${{ values.app_name }}-dev.test.com:9080
-        description: Dev environment via nginx ingress (port 9080)
+      - url: http://${{ values.app_name }}-staging.test.com:9080
     paths:
-      /api/v3/info:
-        get:
-          summary: Service info
-          responses:
-            "200": { description: Info payload }
-      /api/v3/healthz:
-        get:
-          summary: Liveness / readiness probe
-          responses:
-            "200": { description: Healthy }
-      /api/v3/hostname:
-        get:
-          summary: Pod hostname
-          responses:
-            "200": { description: Hostname }
-      /api/v3/echo:
-        post:
-          summary: Echo request body
-          requestBody:
-            required: false
-            content:
-              application/json:
-                schema: { type: object }
-          responses:
-            "200": { description: Echoed payload }
-      /api/v3/time:
-        get:
-          summary: Current UTC time
-          responses:
-            "200": { description: Current time }
-      /api/v3/random:
-        get:
-          summary: Random integer (v3-only)
-          description: Returns a pseudo-random integer between 1 and 100.
-          responses:
-            "200":
-              description: Random number
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      number: { type: integer, minimum: 1, maximum: 100 }
-                      api_version: { type: string, enum: ["v3"] }
-      /api/v3/uptime:
-        get:
-          summary: Process uptime (v3-only)
-          description: Returns the number of seconds since this pod's process started.
-          responses:
-            "200":
-              description: Uptime
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      uptime_seconds: { type: integer }
-                      api_version: { type: string, enum: ["v3"] }
-      /api/v3/env:
-        get:
-          summary: Selected environment variables (v3-only)
-          description: |
-            Returns an explicitly-allowlisted subset of env vars
-            (IMAGE_TAG, GIT_SHA, DEFAULT_API_VERSION, APP_NAME).
-            Secrets are never exposed here — the allowlist is the contract.
-          responses:
-            "200":
-              description: Env payload
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      env: { type: object, additionalProperties: { type: string } }
-                      api_version: { type: string, enum: ["v3"] }
+      /api/v6/info:     { get: { summary: Service info, responses: { "200": { description: OK } } } }
+      /api/v6/healthz:  { get: { summary: Health probe, responses: { "200": { description: OK } } } }
+      /api/v6/hostname: { get: { summary: Pod hostname, responses: { "200": { description: OK } } } }
+      /api/v6/echo:     { post: { summary: Echo body,   responses: { "200": { description: OK } } } }
+      /api/v6/time:     { get: { summary: Current UTC,  responses: { "200": { description: OK } } } }
+      /api/v6/random:   { get: { summary: Random int,   responses: { "200": { description: OK } } } }
+      /api/v6/uptime:   { get: { summary: Uptime,       responses: { "200": { description: OK } } } }
+      /api/v6/metrics:  { get: { summary: Metrics snapshot, responses: { "200": { description: OK } } } }
+      /api/v6/list:     { get: { summary: Paginated random list, responses: { "200": { description: OK } } } }
+      /api/v6/events:   { get: { summary: "Server-Sent Events stream (v6 preview)", responses: { "200": { description: "text/event-stream" } } } }

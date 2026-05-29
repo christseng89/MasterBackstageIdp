@@ -1,11 +1,13 @@
 replicaCount: 1
 
-# Dev preview ships v3 as the default API surface (experimental) so the
-# team can dogfood the new endpoints before promoting to staging/prod.
+# Dev — runs the bleeding edge: v4 stable + v5 stable + v6 experimental.
+# Older versions (v1/v2/v3) all 410 Gone; clients still on those in dev get
+# an immediate, actionable error pointing at the successor.
 apiVersions:
-  default: v3
-  supported: "v1,v2,v3"
-  deprecated: "v1"
+  enabled: "v4,v5,v6"
+  deprecated: ""
+  removed: "v1,v2,v3"
+  default: v6
 
 image:
   tag: ""
@@ -16,6 +18,16 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
+
+# Probes hit v6's healthz since dev's default is v6
+livenessProbe:
+  httpGet:
+    path: /api/v6/healthz
+    port: http
+readinessProbe:
+  httpGet:
+    path: /api/v6/healthz
+    port: http
 
 resources:
   requests:

@@ -1,11 +1,13 @@
 replicaCount: 2
 
-# Staging mirrors prod's default API version so promotion is a no-op
-# from an API-contract perspective — only the image tag changes.
+# Staging — validates v3+v4+v5+v6 surface.  v6 is here as preview so customers
+# integrating against it can hit a near-prod-like environment.  v1/v2 already
+# retired (410 Gone) — staging serves as the "post-removal compatibility" check.
 apiVersions:
-  default: v2
-  supported: "v1,v2,v3"
-  deprecated: "v1"
+  enabled: "v3,v4,v5,v6"
+  deprecated: ""
+  removed: "v1,v2"
+  default: v4
 
 image:
   tag: ""

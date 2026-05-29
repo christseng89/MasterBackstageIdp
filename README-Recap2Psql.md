@@ -97,3 +97,10 @@ docker run --rm --name backstage-local \
   yarn start
   # ▶ Backstage running at http://localhost:3000
 ```
+
+## Backstage k8s sync Troubleshooting
+
+```bash
+kubectl rollout restart deployment <deploy-name> -n <namespace>
+
+```

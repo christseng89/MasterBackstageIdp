@@ -9,10 +9,13 @@ metadata:
     # plugin both display it directly.
     app.kubernetes.io/version: {{ .Values.apiVersions.default | quote }}
   annotations:
+    # Per-env multi-version state, readable from Backstage K8s plugin and any
+    # cluster tooling that respects standard annotations.
     api.example.com/default-version: {{ .Values.apiVersions.default | quote }}
-    api.example.com/supported-versions: {{ .Values.apiVersions.supported | quote }}
+    api.example.com/enabled-versions: {{ .Values.apiVersions.enabled | quote }}
     api.example.com/deprecated-versions: {{ .Values.apiVersions.deprecated | quote }}
-    api.example.com/backstage-refs: "api:default/${{values.app_name}}-api-v1,api:default/${{values.app_name}}-api-v2,api:default/${{values.app_name}}-api-v3"
+    api.example.com/removed-versions: {{ .Values.apiVersions.removed | quote }}
+    api.example.com/backstage-refs: "api:default/${{values.app_name}}-api-v1,api:default/${{values.app_name}}-api-v2,api:default/${{values.app_name}}-api-v3,api:default/${{values.app_name}}-api-v4,api:default/${{values.app_name}}-api-v5,api:default/${{values.app_name}}-api-v6"
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -46,9 +49,9 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          # Multi-API-version metadata exposed to the running process.
-          # The /version endpoint, /api/v3/env, and deprecated_headers
-          # middleware all read these env vars.
+          # Multi-API-version routing config.  The same image reads these env
+          # vars to decide which blueprints to register and which paths to 410.
+          # See src/app.py + src/deprecated_headers.py + src/removed_handlers.py.
           env:
             - name: APP_NAME
               value: "${{values.app_name}}"
@@ -58,6 +61,12 @@ spec:
               value: {{ .Values.git.sha | default .Values.image.tag | quote }}
             - name: DEFAULT_API_VERSION
               value: {{ .Values.apiVersions.default | quote }}
+            - name: ENABLED_VERSIONS
+              value: {{ .Values.apiVersions.enabled | quote }}
+            - name: DEPRECATED_VERSIONS
+              value: {{ .Values.apiVersions.deprecated | quote }}
+            - name: REMOVED_VERSIONS
+              value: {{ .Values.apiVersions.removed | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
