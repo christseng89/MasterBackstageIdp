@@ -11,6 +11,10 @@
 > 另外 root folder 多了一個 [`github-org-runner/`](./github-org-runner/) 資料夾,
 > 提供 **org-level self-hosted runner** 的測試用 YAML — 不影響任何 template,可獨立
 > 套用驗證 org runner 是否能跑起來,詳見本文 §5。
+>
+> Demo 完想清乾淨?root 也有一支 [`teardown-app.sh`](./teardown-app.sh) — 一條指令
+> 把指定 app 在 ArgoCD / K8s / ARC / Backstage / GitHub / Windows hosts 全部七個
+> surface 拆乾淨,詳見 §6。
 
 ---
 
@@ -298,3 +302,106 @@ kubectl delete -f github-org-runner/org-runner.yaml
 [`github-org-runner/README.md` → "Optional: enable webhook server"](./github-org-runner/README.md)
 章節,這裡不重複貼。Webhook 啟用後可以把 `org-runner.yaml` 的 `minReplicas` 改回 `0`,
 走真正的 scale-to-zero 省資源。
+
+---
+
+## 6. 拆台 — 完整清掉一個 scaffolded app(`teardown-app.sh`)
+
+Root folder 提供 [`teardown-app.sh`](./teardown-app.sh) 把一個 scaffolded
+app 在 ArgoCD / K8s / ARC / Backstage / GitHub / Windows hosts **全部七個 surface**
+一口氣清乾淨。比手動敲 `kubectl delete` / `argocd app delete` / `gh repo delete`
+更安全(順序處理依賴關係、idempotent、卡 Terminating 也有逃生口)。
+
+### 6.1 用法
+
+```bash
+cd D:\development\MasterBackstageIdp                     # 必須在 root,要讀 .env
+bash teardown-app.sh python-app-apis1                    # 互動模式 — 列清單、要求輸入 app name 確認
+bash teardown-app.sh python-app-apis1 --yes              # 不問,直接執行
+bash teardown-app.sh python-app-apis1 --skip-github      # 只清 K8s/ArgoCD/Backstage,保 GitHub repo
+bash teardown-app.sh python-app-apis1 --skip-backstage   # 保留 Backstage catalog
+bash teardown-app.sh python-app-apis1 --skip-hosts       # 保留 Windows hosts 條目
+```
+
+### 6.2 七個 Step,依賴安全順序
+
+| # | Step | 為什麼是這順序 |
+|---|------|------|
+| 1 | ArgoCD apps `<app>-dev/staging/prod` 帶 `--cascade --yes` | 先讓 ArgoCD 把它管理的 K8s resource 帶走,後續 namespace 刪除不會留遺孤 |
+| 2 | ArgoCD repo registration deregister | 沒 app 引用了才能安全 deregister |
+| 3 | K8s namespaces 三個(`<app>-dev/staging/prod`),含 **3a graceful → 3b 等 30 秒 → 3c force-finalize** 三層保險 | 卡在 Terminating 的 namespace 會被偵測並透過 `/finalize` subresource 強制清掉 |
+| 4 | ARC `RunnerDeployment` + per-app `ServiceAccount`(in `github-runners` namespace) | runner pod 自動帶下,ARC 自動向 GitHub deregister |
+| 5 | Backstage catalog entities — 預設**印 manual UI 步驟**(SSO 友善);只有 `.env` 設 `BACKSTAGE_TOKEN` 才會呼叫 catalog API 自動刪 1 Component + N API entities | Backstage 通常綁 GitHub OAuth SSO,catalog API 回 401,script 無法取得 token。所以預設走最可靠的路徑:印明確的 UI 點擊步驟(Catalog → Component → ⋮ → Unregister Location)讓使用者 30 秒手動清完。同時 grep `app-config*.yaml` + `catalog/` 偵測 hardcode,有的話印警告 |
+| 6 | GitHub repository(透過 `gh repo delete`) | **最後刪** — 之前所有外部系統都 dereference 完了 |
+| 7 | Windows hosts 三行 | 純客戶端清理,需要 Git Bash 以系統管理員開啟 |
+
+### 6.3 Prerequisites
+
+```bash
+# 1. .env 內含 ARGOCD_PASSWORD(根目錄已有的 .env 即可)
+# 2. gh CLI 認證過,且 PAT 需含 `delete_repo` scope
+gh auth refresh -h github.com -s delete_repo
+
+# 3. kubectl 指向 docker-desktop context
+kubectl config use-context docker-desktop
+
+# 4. argocd CLI 安裝且能連到 ARGOCD_SERVER(預設 argocd.test.com:9080)
+
+# 5. Backstage backend 在 BACKSTAGE_URL(預設 http://localhost:7007)
+#    — 預設只需要 backend 活著就好(會印 manual UI 步驟,自己去 UI Unregister)。
+#    — 若想讓 Step 5 完全自動,extra step:把 Bearer token 寫進 .env:
+#         BACKSTAGE_TOKEN=eyJ...
+#       從瀏覽器 DevTools → Network → 任一 /api/catalog/* request 的 Authorization
+#       header 複製即可。User token 約 1 小時過期;長期解法是在 app-config.local.yaml
+#       設 backend.auth.externalAccess 的 static token。
+```
+
+### 6.4 互動模式長這樣
+
+```
+About to delete EVERYTHING related to:  python-app-apis1
+
+  1. ArgoCD apps        : python-app-apis1-dev / -staging / -prod
+  2. ArgoCD repo        : https://github.com/christseng89/python-app-apis1
+  3. K8s namespaces     : python-app-apis1-dev / -staging / -prod
+  4. ARC runner         : python-app-apis1-self-hosted-runner (ns=github-runners)
+  5. Backstage catalog  : 1 Component + N API entities
+  6. GitHub repository  : christseng89/python-app-apis1
+  7. Windows hosts      : python-app-apis1-{dev,staging,prod}.test.com
+
+This is IRREVERSIBLE.
+Type the app name 'python-app-apis1' to confirm: ▌
+```
+
+輸入錯 → abort。輸入對 → 開始跑。每個 Step 印 `→` / `✓` / `↷ skip` / `⚠ warn` 字頭,容易追蹤。
+
+### 6.5 跑完後的 sanity-check
+
+腳本結尾印出 5 條驗證命令,複製貼上跑一遍,**全部空輸出代表清乾淨**:
+
+```bash
+kubectl get ns | grep <app>
+kubectl get runners,runnerdeployment -n github-runners | grep <app>
+argocd app list | grep <app>
+argocd repo list | grep <app>
+gh api repos/christseng89/<app> 2>&1 | grep -i 'not found'
+```
+
+### 6.6 已知陷阱
+
+- **Backstage SSO + catalog API 401** — Backstage 通常綁 GitHub OAuth,catalog API 對沒帶 token 的 request 一律 401。**這是 by design,不是 bug**:Step 5 預設走 manual UI 路徑(印 6 步驟,30 秒點完),不會因為 401 silently fail。Pre-flight 偵測到 401 時印 `✓ Backstage reachable ... (HTTP 401 — SSO/auth enabled; Step 5 will print manual UI steps)` 而不是 warn。若要完全自動,看 §6.3 第 5 條 — 從 DevTools 撈 Bearer token 設 `BACKSTAGE_TOKEN`,或在 `app-config.local.yaml` 設 static externalAccess token。
+- **BACKSTAGE_TOKEN 過期** — 從 DevTools 撈出來的 user token 約 **1 小時就失效**。下次跑 teardown 之前先用一行 curl 驗證,不通就立刻重抓,免得 Step 5 在中途掉到 401 fallback。
+  ```bash
+  # Quick check before teardown
+  source .env
+  curl -s -o /dev/null -w 'HTTP %{http_code}\n' \
+    -H "Authorization: Bearer $BACKSTAGE_TOKEN" \
+    'http://localhost:7007/api/catalog/entities?limit=1'
+  # → HTTP 200 = token 還活著;HTTP 401 = 過期,需要重抓
+  ```
+  重抓流程:Backstage UI 重登 → F12 DevTools → Network tab → filter `catalog` → F5 重整 → 點任一 `entities?...` request → Headers 區塊找 `authorization: Bearer eyJ...` → 複製 `eyJ` 後整段(**不含** `Bearer ` 前綴)→ 編輯 `.env` 替換 `BACKSTAGE_TOKEN=` 那一行。**懶人解**:`sed -i '/^BACKSTAGE_TOKEN=/d' .env` 直接砍掉那行,script 自動 fallback 到 manual UI 路徑,15 秒點完一個 entity。長期解:在 `app-config.local.yaml` 設 `backend.auth.externalAccess` 的 static token,永遠不過期 — 但只在 dev 機器設,不要進 production config。
+- **`teardown-app.sh` 之前版本的 Step 5 silent-fail bug**(已修)— 早期 5b 用 `python3 -c "...open('$TMP_BODY')..."` 讀檔,Git Bash MSYS 把多行 python 翻爛,parse 失敗後 `ENTITY_UID` 空,整個 entity 被 silently 跳過,UI 還看得到 entity 但 script 印 `↷ no entities found`。**已改為 single-line python + `sys.argv` 傳 APP + `?filter=metadata.name=` endpoint(不用 by-name)+ HTTP code 先檢查再 parse**。如果你跑舊版撞到這個 false-negative,把 script 同步到 main 後重跑即可。
+- **Backstage `app-config.local.yaml` / `catalog/` 內 hardcode 的 entity** — 即使 UI Unregister 成功,Backstage 下次 refresh(約 100 秒)還是會把 entity 重註冊。Step 5 結尾**自動 grep** `app-config*.yaml` + `catalog/*.yaml`,印出哪個檔案有 hardcode + 提示手動移除;沒 hardcode 則印 `✓ no '<app>' hardcode found ... safe from auto re-registration`。
+- **PAT 沒 `delete_repo` scope** — Step 6 會印一行 `gh auth refresh -h github.com -s delete_repo` 提示。
+- **hosts 檔沒寫入權限** — Git Bash 沒以 Administrator 開啟。Step 7 會印 3 行 `Add-Content` 反向版本,手動執行 `Remove-Item` 等。
+- **卡在 Terminating 的 namespace 仍清不掉** — 3c 已經透過 `/finalize` subresource 強制處理。極罕見情況(controller 完全壞掉)會 warn 並要求 `kubectl describe ns <app>-<env>` 自行 debug。

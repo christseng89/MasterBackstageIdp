@@ -7,6 +7,7 @@ import { githubAuthApiRef } from '@backstage/core-plugin-api';
 import { SignInPageBlueprint } from '@backstage/plugin-app-react';
 import { SignInPage } from '@backstage/core-components';
 import { createFrontendModule } from '@backstage/frontend-plugin-api';
+import githubActionsPlugin from '@backstage-community/plugin-github-actions/alpha';
 
 const signInPage = SignInPageBlueprint.make({
   params: {
@@ -30,6 +31,7 @@ export default createApp({
     catalogPlugin,
     navModule,
     techDocsReportIssueAddonModule,   // ← add
+    githubActionsPlugin,   // ← add
     createFrontendModule({
       pluginId: 'app',
       extensions: [signInPage],
