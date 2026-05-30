@@ -87,3 +87,13 @@ techdocs:
     type: "local"
     local:
       publishDirectory: "/app/techdocs-storage"
+
+argocd:
+  # Your ingress serves Argo CD over plain HTTP on :9080, so relax the HTTPS requirement
+  localDevelopment: true
+  appLocatorMethods:
+    - type: "config"
+      instances:
+        - name: docker-desktop
+          url: http://argocd.test.com:9080
+          token: ${ARGOCD_AUTH_TOKEN}

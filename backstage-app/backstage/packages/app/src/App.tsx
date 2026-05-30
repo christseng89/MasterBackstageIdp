@@ -8,6 +8,7 @@ import { SignInPageBlueprint } from '@backstage/plugin-app-react';
 import { SignInPage } from '@backstage/core-components';
 import { createFrontendModule } from '@backstage/frontend-plugin-api';
 import githubActionsPlugin from '@backstage-community/plugin-github-actions/alpha';
+import { argocdModule } from './modules/argocd';   // ← add
 
 const signInPage = SignInPageBlueprint.make({
   params: {
@@ -32,6 +33,7 @@ export default createApp({
     navModule,
     techDocsReportIssueAddonModule,   // ← add
     githubActionsPlugin,   // ← add
+    argocdModule,   // ← add
     createFrontendModule({
       pluginId: 'app',
       extensions: [signInPage],

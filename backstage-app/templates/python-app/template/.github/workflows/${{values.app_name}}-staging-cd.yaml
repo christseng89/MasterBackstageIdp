@@ -176,6 +176,7 @@ jobs:
             # --validate=false: skip server-side Helm rendering during creation.
             /tmp/argocd app create "$ARGOCD_APP" \
               --project default \
+              --label backstage.io/component=${{ values.app_name }} \
               --sync-policy automated \
               --auto-prune \
               --self-heal \

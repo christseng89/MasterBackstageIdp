@@ -254,6 +254,7 @@ jobs:
             # on first access. The explicit sync step below handles deployment.
             /tmp/argocd app create ${{ '${{ env.ARGOCD_APP }}' }} \
               --project default \
+              --label backstage.io/component=${{ values.app_name }} \
               --sync-policy automated \
               --auto-prune \
               --self-heal \

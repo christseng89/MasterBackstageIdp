@@ -405,3 +405,12 @@ gh api repos/christseng89/<app> 2>&1 | grep -i 'not found'
 - **PAT 沒 `delete_repo` scope** — Step 6 會印一行 `gh auth refresh -h github.com -s delete_repo` 提示。
 - **hosts 檔沒寫入權限** — Git Bash 沒以 Administrator 開啟。Step 7 會印 3 行 `Add-Content` 反向版本,手動執行 `Remove-Item` 等。
 - **卡在 Terminating 的 namespace 仍清不掉** — 3c 已經透過 `/finalize` subresource 強制處理。極罕見情況(controller 完全壞掉)會 warn 並要求 `kubectl describe ns <app>-<env>` 自行 debug。
+
+### Remove Catalog from Backstage UI
+
+```bash
+TOKEN=eyJ...   # 從 DevTools 複製的 Bearer token(不含 "Bearer " 前綴)
+curl -s http://localhost:7007/api/catalog/locations   -H "Authorization: Bearer $TOKEN"   | jq -r '.[] | "\(.data.id)\t\(.data.target) "' | grep apis1
+
+curl -i -X DELETE http://localhost:7007/api/catalog/locations/<location_id>   -H "Authorization: Bearer $TOKEN"
+```
