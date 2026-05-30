@@ -6,11 +6,7 @@ metadata:
   name: python-template-multi-apis
   title: Python flask multi-API-version template
   description: |
-    Provisions a Python flask service that demonstrates the additive
-    multi-API-version pattern — one image simultaneously serves
-    /api/v1, /api/v2, /api/v3 with v1 marked deprecated, v2 production,
-    v3 experimental. Generates 3 Backstage API entities + matching
-    OpenAPI specs and RFC 9745/8594 deprecation headers.
+    Python flask service that demonstrates the additive multi-API-version pattern.
 
 spec:
   owner: development
@@ -49,6 +45,10 @@ spec:
       action: fetch:template
       input:
         url: ./template
+        # Binary assets (mp4/gif) must be copied verbatim — running Nunjucks on
+        # them crashes fetch:template ("Fetch Base" dies after the text files).
+        copyWithoutTemplating:
+          - src/templates/img/**
         values:
           app_name: ${{ parameters.component_id }}
 

@@ -46,6 +46,10 @@ spec:
       action: fetch:template
       input:
         url: ./template
+        # Binary assets (mp4/gif) must be copied verbatim — running Nunjucks on
+        # them crashes fetch:template ("Fetch Base" dies after the text files).
+        copyWithoutTemplating:
+          - src/templates/img/**
         values:
           app_name: ${{ parameters.component_id }}
 
