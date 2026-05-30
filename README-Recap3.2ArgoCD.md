@@ -82,6 +82,7 @@ docker run --rm --name backstage-local \
   -e ARGOCD_AUTH_TOKEN=$ARGOCD_AUTH_TOKEN \
   -e NODE_OPTIONS="--dns-result-order=ipv4first" \
   --add-host=host.docker.internal:host-gateway \
+  --add-host=argocd.test.com:host-gateway \
   -p 3000:3000 -ti -p 7007:7007 \
   -v //d/development/MasterBackstageIdp/backstage-app://app \
   -v //d/development/MasterBackstageIdp/backstage-app/techdocs-storage://app/techdocs-storage \
@@ -113,6 +114,9 @@ your local `kubernetes` clusters and GitHub integration — the URL points at yo
 argocd:
   # Your ingress serves Argo CD over plain HTTP on :9080, so relax the HTTPS requirement
   localDevelopment: true
+  # Frontend deep-link target. Without it the card's external link degrades to the
+  # Argo CD applications *list*; with it you get .../applications/<ns>/<app>.
+  baseUrl: http://argocd.test.com:9080
   appLocatorMethods:
     - type: 'config'
       instances:
@@ -121,9 +125,15 @@ argocd:
           token: ${ARGOCD_AUTH_TOKEN}
 ```
 
-> The backend process makes the Argo CD calls. For local `yarn start` it runs on the host, which
-> resolves `argocd.test.com` via your hosts file. If you run the **Dockerized** backend instead,
-> use `url: http://host.docker.internal:9080` (the container can't resolve `argocd.test.com`).
+> Two URLs, two purposes: the instance `url` is what the **backend** calls (so inside the container
+> it must resolve — see the `--add-host` note below), while `baseUrl` is the **frontend** link the
+> browser opens (so it's whatever you type in your own browser, `http://argocd.test.com:9080`).
+>
+> The backend process makes the Argo CD calls. When the backend runs **inside the container**, it
+> can't resolve `argocd.test.com` from the Windows hosts file — add
+> `--add-host=argocd.test.com:host-gateway` to your `docker run` so the container reaches the host
+> ingress on `:9080`. (Keep the URL as `argocd.test.com`, not `host.docker.internal` — the ingress
+> routes by the `Host` header.)
 
 ## 4. Bridge the frontend into the new frontend system
 
@@ -144,17 +154,33 @@ The plugin's README shows the legacy `EntityPage.tsx` wiring, which this app doe
 > history) and covers what the summary card showed. Don't add the summary card unless a future
 > plugin version ships it as a non-routable or native new-system extension.
 
+> **Also register the plugin's APIs.** `DeploymentLifecycle` calls `useApi(argoCDApiRef)`
+> (`apiRef{plugin.argo.cd.service}`). Bridging the component does **not** register that API, so
+> the tab throws *"No implementation available for apiRef{plugin.argo.cd.service}"*. Register the
+> legacy plugin's `getApis()` factories as `ApiBlueprint` extensions (the same thing Backstage's
+> own `core-compat-api` does).
+
 Create `packages/app/src/modules/argocd.tsx`:
 
 ```tsx
-import { createFrontendModule } from '@backstage/frontend-plugin-api';
+import { ApiBlueprint, createFrontendModule } from '@backstage/frontend-plugin-api';
 import { convertLegacyEntityContentExtension } from '@backstage/plugin-catalog-react/alpha';
 import {
   ArgocdDeploymentLifecycle,
+  argocdPlugin,
   isArgocdConfigured,
 } from '@backstage-community/plugin-argocd';
 
-// Deployment lifecycle -> a dedicated "Deployments" tab at /argocd
+// 1) Register the legacy plugin's API factories (argoCDApiRef + instance API) so
+//    useApi() inside DeploymentLifecycle resolves.
+const argocdApiExtensions = [...argocdPlugin.getApis()].map(factory =>
+  ApiBlueprint.make({
+    name: factory.api.id,
+    params: defineParams => defineParams(factory),
+  }),
+);
+
+// 2) Deployment lifecycle -> a dedicated "Deployments" tab at /argocd
 const argocdLifecycleContent = convertLegacyEntityContentExtension(
   ArgocdDeploymentLifecycle,
   {
@@ -167,7 +193,7 @@ const argocdLifecycleContent = convertLegacyEntityContentExtension(
 
 export const argocdModule = createFrontendModule({
   pluginId: 'catalog',
-  extensions: [argocdLifecycleContent],
+  extensions: [...argocdApiExtensions, argocdLifecycleContent],
 });
 ```
 
@@ -244,5 +270,12 @@ deployment lifecycle across dev/staging/prod, backed by Argo CD at `http://argoc
   `convertLegacyEntityContentExtension` (step 4) — do not add the card. After fixing, do a clean
   rebuild (the dev server's HMR may keep the old module registered): stop `yarn start`, optionally
   `rm -rf node_modules/.cache`, restart, and hard-refresh the browser.
+
+- **`NotImplementedError: No implementation available for apiRef{plugin.argo.cd.service}`** — the
+  module bridged the component but didn't register the plugin's API factories. Add the
+  `ApiBlueprint` registration from `argocdPlugin.getApis()` (step 4).
+- **Card's external link opens the Argo CD applications *list* instead of the specific app** —
+  top-level `argocd.baseUrl` isn't set. Add `baseUrl: http://argocd.test.com:9080` (step 3); the
+  link then resolves to `.../applications/<namespace>/<app>`.
 
 For Argo Rollouts setup and its troubleshooting, see `README-Recap3.3ArgoRollouts.md`.

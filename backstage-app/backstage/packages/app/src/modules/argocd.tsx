@@ -1,33 +1,38 @@
-import { createFrontendModule } from '@backstage/frontend-plugin-api';
+import { ApiBlueprint, createFrontendModule } from '@backstage/frontend-plugin-api';
 import { convertLegacyEntityContentExtension } from '@backstage/plugin-catalog-react/alpha';
 import {
   ArgocdDeploymentLifecycle,
+  argocdPlugin,
   isArgocdConfigured,
 } from '@backstage-community/plugin-argocd';
 
-// Both ArgocdDeploymentSummary and ArgocdDeploymentLifecycle are *routable* legacy
-// extensions (createRoutableExtension, mountPoint: rootRouteRef).
-//
-// - convertLegacyEntityContentExtension binds that routeRef into the app route
-//   tree (routeRef: convertLegacyRouteRef(mountPoint)), so the content/tab works.
-// - convertLegacyEntityCardExtension does NOT handle the mountPoint/routeRef, so a
-//   routable *card* (ArgocdDeploymentSummary) can't resolve its mount point and
-//   throws "Routable extension component ... was not discovered in the app element
-//   tree". We therefore expose only the lifecycle as a tab — it is the full Argo CD
-//   deployment view (per-env sync/health/history) and covers what the summary card
-//   showed.
+// 1) Register the legacy plugin's API factories (argoCDApiRef =
+//    apiRef{plugin.argo.cd.service}, plus the instance API) into the new frontend
+//    system. convertLegacyEntityContentExtension only bridges the *component* —
+//    it does NOT register the APIs that component calls via useApi(), which is why
+//    DeploymentLifecycle throws "No implementation available for
+//    apiRef{plugin.argo.cd.service}". We wrap each legacy ApiFactory exposed by
+//    argocdPlugin.getApis() in an ApiBlueprint extension (same approach Backstage's
+//    own core-compat-api uses).
+const argocdApiExtensions = [...argocdPlugin.getApis()].map(factory =>
+  ApiBlueprint.make({
+    name: factory.api.id,
+    params: defineParams => defineParams(factory),
+  }),
+);
 
+// 2) Bridge the (routable) DeploymentLifecycle component as a "Deployments" tab.
 const argocdLifecycleContent = convertLegacyEntityContentExtension(
   ArgocdDeploymentLifecycle,
   {
     name: 'argocd-deployment-lifecycle',
     path: 'argocd',
-    title: 'Deployments',
+    title: 'Argo CD',
     filter: entity => Boolean(isArgocdConfigured(entity)),
   },
 );
 
 export const argocdModule = createFrontendModule({
   pluginId: 'catalog',
-  extensions: [argocdLifecycleContent],
+  extensions: [...argocdApiExtensions, argocdLifecycleContent],
 });

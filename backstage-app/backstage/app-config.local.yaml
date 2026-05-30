@@ -91,6 +91,10 @@ techdocs:
 argocd:
   # Your ingress serves Argo CD over plain HTTP on :9080, so relax the HTTPS requirement
   localDevelopment: true
+  # baseUrl is the *frontend* link target — used to build deep links like
+  # http://argocd.test.com:9080/applications/argocd/<app>. Without it the card
+  # link degrades to the Argo CD applications list.
+  baseUrl: http://argocd.test.com:9080
   appLocatorMethods:
     - type: "config"
       instances:
