@@ -1,0 +1,80 @@
+# =============================================================================
+# argo-rollouts Helm values  (mirrors the argocd-values.yaml conventions)
+#   - NGINX ingress, TLS disabled
+#   - *.test.com domain
+#   - dashboard UI enabled (the Rollouts equivalent of argocd "server")
+# Install:
+#   helm install argo-rollouts argo/argo-rollouts \
+#     -n argo-rollouts --create-namespace -f values-rollouts.yaml
+#
+# NOTE on the dashboard "Loading..." behaviour:
+#   The dashboard hangs on "Loading..." when the SELECTED NAMESPACE has no
+#   Rollouts. Access it with a namespace in the URL path that actually has
+#   Rollouts, e.g. http://rollouts.test.com:9080/rollouts/<namespace>
+#   The bare /rollouts/ path defaults to an empty namespace and spins forever.
+# =============================================================================
+
+# Manage CRDs via Helm (keep them on uninstall so live Rollouts aren't deleted)
+installCRDs: true
+keepCRDs: true
+
+# Cluster-wide install (set false for namespaced-only mode without cluster RBAC)
+clusterInstall: true
+
+# -----------------------------------------------------------------------------
+# Controller  (parallels argocd "controller")
+# -----------------------------------------------------------------------------
+controller:
+  replicas: 1
+  image:
+    # tag: v1.9.0 # optional pin; remove to follow the chart default
+  # Example tunables — uncomment/adjust as needed
+  # extraArgs:
+  #   - --loglevel=info
+  metrics:
+    enabled: true # expose the metrics service
+    serviceMonitor:
+      enabled: false # set true if you run Prometheus Operator
+
+# -----------------------------------------------------------------------------
+# Dashboard  (parallels argocd "server" + ingress)
+# -----------------------------------------------------------------------------
+dashboard:
+  enabled: true
+  replicas: 1
+  image:
+    # tag: v1.9.0 # optional pin; remove to follow the chart default
+  readonly: false
+
+  # Service listens on 3100 inside the cluster (chart default). The Flowise
+  # port-3100 conflict was only on the local machine during `kubectl port-forward`
+  # (use a different LOCAL port, e.g. `kubectl port-forward ... 3200:3100`).
+  # It does NOT affect the in-cluster Service, so leave this at the default.
+  service:
+    port: 3200
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - rollouts.test.com
+    paths:
+      - /
+    pathType: Prefix
+    tls: [] # TLS disabled (mirrors argocd tls: false)
+    annotations:
+      # The dashboard streams the rollout list over a long-lived (SSE) connection.
+      # NGINX buffers responses by default, which stalls the stream. These disable
+      # buffering and allow a long-lived stream.
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+# -----------------------------------------------------------------------------
+# Notifications  (off by default, kept for parity / future use)
+# -----------------------------------------------------------------------------
+notifications:
+  configmap:
+    create: true
+  secret:
+    create: false

@@ -7,6 +7,38 @@ results) when the Kubernetes plugin is allowed to read those custom resources. T
 
 Prerequisite: the Argo CD plugin from Recap 3.2 is installed and working.
 
+## 0. Install the Argo Rollouts
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update argo
+helm show values argo/argo-rollouts > rollouts-values.yaml
+
+helm install argo-rollouts argo/argo-rollouts \
+  --namespace argo-rollouts \
+  --create-namespace \
+  -f python-app/charts/rollouts/values-rollouts.yaml
+
+```
+
+```cmd
+notepad C:\Windows\System32\drivers\etc\hosts
+  127.0.0.1 rollouts.test.com
+
+ping rollouts.test.com
+```
+
+```bash
+kubectl create ns demo
+kubectl apply -n demo -f https://raw.githubusercontent.com/argoproj/argo-rollouts/master/docs/getting-started/basic/rollout.yaml
+kubectl apply -n demo -f https://raw.githubusercontent.com/argoproj/argo-rollouts/master/docs/getting-started/basic/service.yaml
+
+kubectl port-forward svc/argo-rollouts-dashboard -n argo-rollouts 3200:3200
+```
+
+http://rollouts.test.com:9080/rollouts
+http://localhost:3200/rollouts/
+
 ## 1. Expose the custom resources to the Kubernetes plugin
 
 The Argo CD views read Rollouts/AnalysisRuns through the Kubernetes plugin. Extend the existing
